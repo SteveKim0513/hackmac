@@ -56,7 +56,13 @@ body {
   font-size: 14px;
 }
 
-.logs-button {
+.header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-button {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-dim);
@@ -69,7 +75,7 @@ body {
   white-space: nowrap;
 }
 
-.logs-button:hover {
+.header-button:hover {
   background: var(--surface-hover);
   color: var(--text);
 }

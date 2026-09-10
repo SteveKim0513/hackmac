@@ -1,5 +1,6 @@
 import { app, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import type { UpdateCheckResult } from '../shared/types';
 
 /**
  * Auto-update via GitHub Releases (github.com/SteveKim0513/hackmac, public —
@@ -48,4 +49,34 @@ export function initAutoUpdate(): void {
 
   setTimeout(() => void autoUpdater.checkForUpdates().catch(() => {}), FIRST_CHECK_DELAY_MS);
   setInterval(() => void autoUpdater.checkForUpdates().catch(() => {}), CHECK_INTERVAL_MS);
+}
+
+const MANUAL_CHECK_TIMEOUT_MS = 15_000;
+
+/** "업데이트 확인" 버튼 — 백그라운드 체크와 같은 `autoUpdater` 이벤트 스트림을
+ * 쓰므로, 이번 수동 확인에 대한 결과만 한 번 받고 리스너를 정리한다. */
+export function checkForUpdatesManually(): Promise<UpdateCheckResult> {
+  if (!app.isPackaged) return Promise.resolve({ status: 'disabled' });
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: UpdateCheckResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      autoUpdater.removeListener('update-available', onAvailable);
+      autoUpdater.removeListener('update-not-available', onNotAvailable);
+      autoUpdater.removeListener('error', onError);
+      resolve(result);
+    };
+    const onAvailable = (info: { version: string }) => settle({ status: 'downloading', version: info.version });
+    const onNotAvailable = () => settle({ status: 'up-to-date' });
+    const onError = (err: Error) => settle({ status: 'error', message: err?.message ?? String(err) });
+    const timer = setTimeout(() => settle({ status: 'error', message: '응답이 없어요' }), MANUAL_CHECK_TIMEOUT_MS);
+
+    autoUpdater.once('update-available', onAvailable);
+    autoUpdater.once('update-not-available', onNotAvailable);
+    autoUpdater.once('error', onError);
+    autoUpdater.checkForUpdates().catch((err) => settle({ status: 'error', message: String(err?.message ?? err) }));
+  });
 }

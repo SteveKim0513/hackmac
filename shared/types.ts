@@ -45,3 +45,9 @@ export interface ActivateResult {
   ok: boolean;
   errors: { shortcutId: string; name: string; message: string }[];
 }
+
+export type UpdateCheckResult =
+  | { status: 'up-to-date' }
+  | { status: 'downloading'; version: string }
+  | { status: 'error'; message: string }
+  | { status: 'disabled' };

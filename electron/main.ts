@@ -6,7 +6,7 @@ import path from 'node:path';
 import { serviceCatalog } from './services';
 import { createTrayIcon } from './tray-icon';
 import { logsRoot } from './exec-log';
-import { initAutoUpdate } from './updater';
+import { checkForUpdatesManually, initAutoUpdate } from './updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -137,6 +137,8 @@ ipcMain.handle('services:activate', (_e, id: string) => serviceCatalog.activate(
 ipcMain.handle('services:deactivate', (_e, id: string) => serviceCatalog.deactivate(id));
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+ipcMain.handle('updates:check', () => checkForUpdatesManually());
 
 ipcMain.handle('logs:open', () => {
   const dir = logsRoot();

@@ -39,6 +39,14 @@ export default function App() {
     setServices(refreshed);
   };
 
+  const handleCheckForUpdates = async () => {
+    const result = await window.playbook.checkForUpdates();
+    if (result.status === 'up-to-date') push('이미 최신 버전이에요');
+    else if (result.status === 'downloading') push(`새 버전 v${result.version}을 받고 있어요 — 다 받으면 재시동을 물어볼게요`);
+    else if (result.status === 'disabled') push('개발 모드에서는 업데이트를 확인하지 않아요');
+    else push(`업데이트를 확인하지 못했어요: ${result.message}`, 'error');
+  };
+
   const selected = view.name === 'detail' ? services.find((s) => s.id === view.serviceId) ?? null : null;
 
   return (
@@ -49,11 +57,16 @@ export default function App() {
           <header className="app-header">
             <div>
               <h1>HackMac</h1>
-              <p>미리 만들어둔 단축키+스크립트 서비스를 앱처럼 켜고 꺼요.</p>
+              <p>이 Mac, 사실 훨씬 더 많은 걸 할 수 있어요.</p>
             </div>
-            <button className="logs-button" onClick={() => void window.playbook.openLogsFolder()}>
-              로그 보기
-            </button>
+            <div className="header-actions">
+              <button className="header-button" onClick={() => void handleCheckForUpdates()}>
+                업데이트 확인
+              </button>
+              <button className="header-button" onClick={() => void window.playbook.openLogsFolder()}>
+                로그 보기
+              </button>
+            </div>
           </header>
           <ServiceGrid
             services={services}

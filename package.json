@@ -1,7 +1,7 @@
 {
   "name": "hackmac",
-  "version": "0.1.0",
-  "description": "미리 기획한 단축키+스크립트 서비스를 앱스토어처럼 켜고 끄는 완성형 앱",
+  "version": "0.1.1",
+  "description": "이 Mac으로 할 수 있는 일을 늘려주는 서비스 스토어",
   "main": "dist-electron/main.js",
   "author": "",
   "license": "MIT",

@@ -1,7 +1,7 @@
 {
   "id": "gtd-reminders",
   "name": "미리알림 GTD",
-  "tagline": "등록 → 시작 → 완료, 미리알림에 남는 하루 업무 기록",
+  "tagline": "오늘 뭐 했냐고 물으면, 이제 바로 답할 수 있어요",
   "icon": "✅",
   "accentColor": "#30c48d",
   "whatItIs": [
