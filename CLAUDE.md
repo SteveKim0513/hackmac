@@ -23,6 +23,7 @@ npm run dev          # Electron + Vite 개발 서버
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + 렌더러/일렉트론 번들
 npm run dist          # Developer ID 서명 + 공증(notarize) .dmg/.zip 빌드 (release/, 퍼블리시 안 함)
+npm run release       # dist와 동일 + GitHub Releases에 발행까지 (draft로 올라가므로 draft=false 수동 처리 필요)
 ```
 
 - 완료 주장 전 최소 `npm run typecheck` (UI·electron 변경 시 `npm run build`까지) 실행.
@@ -50,15 +51,29 @@ npm run dist          # Developer ID 서명 + 공증(notarize) .dmg/.zip 빌드 
   - `xcrun stapler validate release/mac-arm64/HackMac.app` → `The validate action worked!`이면 오프라인에서도(공증 서버 접속 없이) Gatekeeper가 통과한다.
 - 환경변수가 없으면 electron-builder가 서명은 하되 공증은 건너뛴다(에러 없이 조용히 스킵) — 서명만 된 앱도 미서명보다는 낫지만 최초 실행 시 경고는 여전히 뜬다. 다른 Mac 배포 전에는 반드시 위 검증 커맨드로 공증이 실제로 됐는지 확인할 것.
 
+## 자동 업데이트 (GitHub Releases)
+
+`electron/updater.ts`가 `electron-updater`로 앱 시작 10초 후 한 번, 이후 4시간마다 배경에서 새 버전을 확인한다(패키지 빌드에서만 — `npm run dev`는 비활성). 새 버전을 받으면 "지금 재시동 / 나중에" 네이티브 다이얼로그를 띄우고, "나중에"는 다음 종료 시 자동 적용된다. mind-map-mac과 같은 구조.
+
+- 배포처는 `github.com/SteveKim0513/hackmac` (Public repo — mind-map-mac과 같은 계정 별칭 `git@github.com-stevekim:...` 사용). Public이라 업데이트 확인/다운로드엔 토큰이 필요 없다(Private로 하면 토큰을 앱에 내장해야 해서 배포되는 바이너리마다 개인 계정 토큰이 노출되므로 일부러 Public으로 함).
+- `npm run dist`는 여전히 `--publish never`라 실제 릴리스는 안 올라간다 — 로컬에서 서명 확인만 하고 싶을 때 씀.
+- **실제로 새 버전을 배포하려면 `package.json`의 `version`을 올리고 `npm run release`를 실행한다.** `GH_TOKEN=$(gh auth token --user SteveKim0513)`을 자동으로 넘겨서 서명 → 공증 → GitHub Release(태그 `v<version>`) 생성 → 자산(dmg/zip/blockmap/`latest-mac.yml`) 업로드까지 한 번에 끝낸다.
+- **electron-builder는 릴리스를 기본적으로 draft(비공개 초안)로 만든다.** `electron-updater`는 draft를 못 찾으므로, `npm run release` 후 반드시 draft를 풀어야 실제 사용자에게 업데이트가 보인다:
+  ```bash
+  GH_TOKEN=$(gh auth token --user SteveKim0513) gh release edit v<version> --repo SteveKim0513/hackmac --draft=false
+  ```
+- SteveKim0513 계정으로 릴리스를 올리려면 그 Mac에 `gh auth login`으로 SteveKim0513 계정이 등록돼 있어야 한다(`gh auth token --user SteveKim0513`이 토큰을 돌려줄 수 있어야 함) — 다른 Mac에서 처음 배포할 땐 이것부터 확인.
+
 ## Architecture
 
 ```
-electron/main.ts        ─ 창 생성, 트레이, IPC 핸들러
+electron/main.ts        ─ 창 생성, 트레이, IPC 핸들러, 로그인 시 자동 실행 등록
 electron/services.ts    ─ resources/services 스캔 → 서비스 카탈로그, 켜기/끄기 상태 관리
 electron/parser.ts      ─ .sh 헤더 주석(@svc-*) ↔ ServiceShortcut 변환
 electron/runner.ts      ─ 스크립트 실행 (/bin/zsh)
 electron/hotkeys.ts     ─ 전역 단축키 클레임 소유권 추적 (HotkeyRegistrar)
 electron/settings.ts    ─ 켜진 서비스 id 목록 userData/settings.json 영속화
+electron/updater.ts     ─ GitHub Releases 기반 자동 업데이트 (electron-updater)
 electron/preload.ts     ─ contextBridge로 window.playbook API 노출
 shared/types.ts         ─ main ↔ renderer 공유 타입
 src/App.tsx             ─ 스토어 그리드 / 서비스 상세 뷰 전환

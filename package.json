@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "predist": "npm run kill:dev --silent",
     "dist": "npm run build && APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish never",
+    "prerelease": "npm run kill:dev --silent",
+    "release": "npm run build && GH_TOKEN=$(gh auth token --user SteveKim0513) APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish always",
     "typecheck": "tsc --noEmit",
     "kill:dev": "pkill -f \"$(pwd)/node_modules/electron/dist/Electron.app\" 2>/dev/null; true"
   },
