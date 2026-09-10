@@ -1,0 +1,68 @@
+{
+  "name": "hackmac",
+  "version": "0.1.0",
+  "description": "미리 기획한 단축키+스크립트 서비스를 앱스토어처럼 켜고 끄는 완성형 앱",
+  "main": "dist-electron/main.js",
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "predev": "npm run kill:dev --silent",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "predist": "npm run kill:dev --silent",
+    "dist": "npm run build && APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish never",
+    "typecheck": "tsc --noEmit",
+    "kill:dev": "pkill -f \"$(pwd)/node_modules/electron/dist/Electron.app\" 2>/dev/null; true"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.20",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "co.imaginefutures.hackmac",
+    "productName": "HackMac",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/services",
+        "to": "services"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "SteveKim0513",
+      "repo": "hackmac"
+    }
+  }
+}

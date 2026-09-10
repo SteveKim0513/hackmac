@@ -1,0 +1,66 @@
+#!/bin/zsh
+# @svc-name: 업무 완료
+# @svc-hotkey: Alt+3
+# @svc-description: 일이 끝나면 누르세요. 진행중인 일 중 하나를 골라 닫으면, 시작(업무 시작)한 뒤로 걸린 시간이 자동으로 남아요.
+
+osascript <<'APPLESCRIPT'
+try
+  set ongoingNames to {}
+
+  tell application "Reminders"
+    repeat with l in lists
+      if (name of l) starts with "GTD " then
+        set nms to name of every reminder of l
+        set cds to completed of every reminder of l
+        set dds to due date of every reminder of l
+        repeat with i from 1 to (count of nms)
+          if (item i of cds) is false and (item i of dds) is not missing value then
+            set end of ongoingNames to (item i of nms)
+          end if
+        end repeat
+      end if
+    end repeat
+  end tell
+
+  if (count of ongoingNames) is 0 then
+    display notification "아직 시작한 일이 없어요 — 업무 시작으로 먼저 시작해보세요" with title "📋 완료할 일 없음"
+    return
+  end if
+
+  activate
+  set picked to (choose from list ongoingNames with title "업무 완료" with prompt "무엇을 완료할까요?" OK button name "완료" cancel button name "취소" without multiple selections allowed)
+  if picked is false then return
+  set chosenName to item 1 of picked
+
+  set diffSec to 0
+  tell application "Reminders"
+    repeat with l in lists
+      if (name of l) starts with "GTD " then
+        set matches to (every reminder of l whose name is chosenName and completed is false)
+        if (count of matches) > 0 then
+          set r to item 1 of matches
+          set startD to due date of r
+          set completed of r to true
+          set diffSec to (completion date of r) - startD
+          exit repeat
+        end if
+      end if
+    end repeat
+  end tell
+
+  set h to diffSec div 3600
+  set m to (diffSec mod 3600) div 60
+  if h > 0 then
+    set dur to (h as string) & "시간 " & (m as string) & "분"
+  else
+    set dur to (m as string) & "분"
+  end if
+
+  display notification (chosenName & " (" & dur & ")") with title "✅ 완료했어요"
+on error errText number errNum
+  if errNum is not -128 then
+    log errText
+    display notification errText with title "⚠️ 업무 완료 실패"
+  end if
+end try
+APPLESCRIPT
