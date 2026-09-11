@@ -1,6 +1,7 @@
-import { app, dialog } from 'electron';
+import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { createFileLogger, describeError } from './log';
+import { requestPopup } from './popupWindow';
 import type { UpdateCheckResult } from '../shared/types';
 
 /**
@@ -8,9 +9,11 @@ import type { UpdateCheckResult } from '../shared/types';
  * update checks need no token; publishing does, via GH_TOKEN at `dist` time).
  * Same shape as mind-map-mac's electron/updater.ts.
  *
- * The user only hears about an update once it's fully downloaded, via a
- * native "지금 재시동 / 나중에" dialog. "나중에" still applies automatically
- * on the next quit.
+ * The user only hears about an update once it's fully downloaded, via
+ * HackMac's own 팝업("지금 재시동 / 나중에") — CLAUDE.md의 "사용자가 보는 화면은
+ * 팝업까지 포함해 전부 하나의 디자인 시스템을 따른다" 원칙상 네이티브
+ * dialog.showMessageBox를 쓰지 않는다. "나중에"는 여전히 다음 종료 때
+ * 자동으로 적용된다.
  */
 
 const FIRST_CHECK_DELAY_MS = 10_000;
@@ -37,15 +40,14 @@ const fileLogger = {
 };
 
 async function promptRestart(version: string) {
-  const { response } = await dialog.showMessageBox({
-    type: 'info',
-    message: `새 버전 v${version}이 준비되었어요`,
-    detail: '지금 재시동하면 바로 적용돼요. 나중에 해도 다음에 앱을 종료할 때 자동으로 적용돼요.',
-    buttons: ['지금 재시동', '나중에'],
-    defaultId: 0,
-    cancelId: 1,
+  const result = await requestPopup({
+    kind: 'confirm',
+    title: `새 버전 v${version} 준비 완료`,
+    prompt: '지금 재시동하면 바로 적용돼요. 나중에 해도 다음에 앱을 종료할 때 자동으로 적용돼요.',
+    okLabel: '지금 재시동',
+    cancelLabel: '나중에',
   });
-  if (response === 0) {
+  if (result.ok) {
     autoUpdater.quitAndInstall();
   }
 }

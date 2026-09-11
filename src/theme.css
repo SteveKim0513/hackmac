@@ -71,10 +71,24 @@ html.is-popup body {
   }
 }
 
+/* 키보드 포커스는 그동안 브라우저 기본 파란 링에 맡겨져 있었다 — 다크
+   인디고 팔레트 위에서 튀는 데다 이 앱의 나머지 어떤 것과도 안 어울렸다.
+   `:focus-visible`이라 마우스 클릭에서는 안 뜨고 키보드 탐색에서만 뜬다. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-default);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 .app-shell {
   height: 100%;
   overflow-y: auto;
-  padding: 24px 36px 60px;
+  /* 왼쪽만 92px — electron/main.ts가 고정한 트래픽라이트 위치(x:20)에
+     클러스터 폭(~54px)과 숨 쉴 틈(~18px)을 더한 값. hiddenInset 타이틀바라
+     이 여백이 없으면 "HackMac" 제목이 빨간/노란/초록 버튼과 거의 붙어 보인다. */
+  padding: 28px 36px 60px 92px;
 }
 
 .app-header {

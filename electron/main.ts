@@ -59,6 +59,10 @@ function createMainWindow() {
     minHeight: 520,
     title: 'HackMac',
     titleBarStyle: 'hiddenInset',
+    // macOS 기본 위치(대략 x:13~20, 버전마다 다름)에 맡기면 트래픽라이트와
+    // "HackMac" 제목 사이 간격이 OS 버전에 따라 들쭉날쭉해진다 — 직접 고정해
+    // src/theme.css의 .app-shell 왼쪽 여백(92px)과 정확히 맞춘다.
+    trafficLightPosition: { x: 20, y: 20 },
     backgroundColor: '#08090a', // src/theme.css의 --bg와 맞춰 초기 로드시 깜빡임 방지
     // Playwright는 CDP로 창 내용을 그대로 읽으므로 화면에 보일 필요가 없다 —
     // 실제 디스플레이 밖 좌표에 띄워 화면을 가리지 않는다.

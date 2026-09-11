@@ -50,9 +50,15 @@ HackMac은 "서비스를 켜고 끄는 제품"이다 — 사용자가 단축키�
 
 `src/theme.css`에 이미 구현돼 있다 — 카드는 `--surface` 배경에 `--border` 헤어라인, hover 시 `--surface-hover` + `--border-strong`, 활성 서비스는 `color-mix(in srgb, var(--accent) 40%, var(--border))`로 테두리만 은은하게 물들인다(배경을 통째로 칠하지 않음). `prefers-reduced-motion`을 존중해 애니메이션을 끌 수 있다.
 
+키보드 포커스는 브라우저 기본 파란 링이 아니라 `--accent-default` 2px 아웃라인을 쓴다(`:focus-visible`이라 마우스 클릭에는 안 뜨고 키보드 탐색에서만 뜬다) — 다크 인디고 팔레트 위에서 시스템 기본색이 튀어 보이는 걸 막는다.
+
+메인 창은 `titleBarStyle: 'hiddenInset'`이라 macOS 트래픽라이트(닫기/최소화/최대화)가 콘텐츠 위에 떠 있다. `electron/main.ts`가 `trafficLightPosition: { x: 20, y: 20 }`으로 위치를 고정하고, `.app-shell`이 왼쪽에만 92px 여백(`padding: 28px 36px 60px 92px`)을 둬서 "HackMac" 제목이 트래픽라이트와 붙어 보이지 않게 한다 — OS 기본값에 맡기면 이 간격이 macOS 버전마다 달라진다.
+
 ### 팝업 (선택 · 입력 · 확인)
 
 `electron/popupWindow.ts`가 띄우는 별도 창, `src/popup/PopupApp.tsx` + `popup.css`가 그린다. 창 자체는 `frame:false` + `transparent:true`라 각진 사각형이 아니라 `.popup-card`가 그리는 둥근 카드 하나만 보인다.
+
+서비스 스크립트뿐 아니라 **앱 자신도** 이 팝업을 쓴다 — 예를 들어 `electron/updater.ts`의 "새 버전 준비됨, 지금 재시동할까요?"는 Electron의 네이티브 `dialog.showMessageBox`가 아니라 메인 프로세스에서 `popupWindow.ts`의 `requestPopup()`을 직접 호출한다(소켓을 거칠 필요 없이 같은 프로세스 안이라 함수 호출로 끝난다). **이 앱 안에서 사용자에게 무언가를 확인받아야 하는 순간은 예외 없이 이 팝업을 거친다** — 네이티브 다이얼로그가 조금이라도 섞이면 "하나의 디자인 시스템"이라는 전제가 깨진다.
 
 세 가지 모양이 있고, 서비스 스크립트는 이 중 하나를 `$HACKMAC_POPUP`로 요청한다(호출 방법은 [CLAUDE.md의 "서비스 설계 원칙"](../CLAUDE.md#서비스-설계-원칙) 참고):
 
