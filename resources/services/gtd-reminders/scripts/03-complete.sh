@@ -44,6 +44,17 @@ if [[ $? -ne 0 ]]; then
 fi
 echo "선택 완료: $chosenName"
 
+# 2-1. 완료는 되돌리기 번거로운 조작(소요시간이 그 순간의 완료 시각을
+# 기준으로 굳어버림)이라, 고른 이름을 그대로 되비쳐 보여주고 한 번 더
+# 확인받는다 — 리스트 클릭 한 번이 바로 실행으로 이어지는 것 자체는
+# e2e/popup.spec.ts가 지키는 의도된 동작(선택 자체가 빨라야 함)이라 바꾸지
+# 않고, 실행 직전에 "이걸 완료하는 게 맞는지"만 잘못 클릭에 대한 안전장치로
+# 추가한다.
+"$HACKMAC_POPUP" confirm --title "업무 완료" --prompt "'${chosenName}'을 완료할까요?" --ok "완료" --cancel "취소" > /dev/null
+if [[ $? -ne 0 ]]; then
+  exit 0
+fi
+
 # 3. 완료 처리 — 값은 인자로 넘긴다.
 osascript - "$chosenName" <<'APPLESCRIPT'
 on run argv

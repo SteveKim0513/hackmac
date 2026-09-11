@@ -61,6 +61,16 @@ if [[ $? -ne 0 ]]; then
 fi
 echo "선택 완료: $chosenName"
 
+# 3-1. 잘못 고른 일을 시작하면 그 순간부터 소요시간이 잘못 잡히기 시작하고,
+# 나중에 완료할 때(03-complete.sh)까지 눈치채기 어렵다 — 고른 이름을 그대로
+# 되비쳐 보여주고 한 번 더 확인받는다. 위(2번)의 동시진행 3개 이상 확인과는
+# 별개 안전장치다: 그건 "너무 많이 벌리고 있다"는 경고이고, 이건 "방금 고른
+# 게 진짜 그거 맞냐"는 확인이다.
+"$HACKMAC_POPUP" confirm --title "업무 시작" --prompt "'${chosenName}'을 시작할까요?" --ok "시작" --cancel "취소" > /dev/null
+if [[ $? -ne 0 ]]; then
+  exit 0
+fi
+
 # 4. 시작 처리 — 값은 인자로 넘긴다.
 osascript - "$chosenName" <<'APPLESCRIPT'
 on run argv
