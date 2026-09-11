@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, UpdateCheckResult } from '../shared/types';
+import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -8,6 +8,14 @@ const api = {
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
   openLogsFolder: (): Promise<string> => ipcRenderer.invoke('logs:open'),
   checkForUpdates: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('updates:check'),
+  getThemePreference: (): Promise<ThemePreference> => ipcRenderer.invoke('theme:get'),
+  setThemePreference: (pref: ThemePreference): Promise<void> => ipcRenderer.invoke('theme:set', pref),
+  // 실제로 지금 다크를 써야 하는지(라이트/다크/시스템 선택을 nativeTheme이
+  // 해석한 결과) — src/main.tsx가 이 값으로 <html data-theme>을 세팅한다.
+  getEffectiveDark: (): Promise<boolean> => ipcRenderer.invoke('theme:getEffectiveDark'),
+  onThemeChanged: (callback: (isDark: boolean) => void): void => {
+    ipcRenderer.on('theme:changed', (_e, isDark: boolean) => callback(isDark));
+  },
 };
 
 export type PlaybookApi = typeof api;

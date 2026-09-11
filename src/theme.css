@@ -1,35 +1,77 @@
 :root {
-  color-scheme: dark;
+  /* 라이트/다크 둘 다 지원 — 실제로 어느 쪽을 쓸지는 electron/main.ts가
+     사용자의 라이트/다크/시스템 선택에 따라 nativeTheme.themeSource로
+     결정하고, src/main.tsx가 그 결과를 <html data-theme>에 반영한다.
+     (prefers-color-scheme 미디어쿼리에만 맡기지 않는 이유는 아래
+     [data-theme="dark"] 블록 주석 참고.) 여기 color-scheme은 JS가 아직
+     안 붙은 첫 페인트 한 프레임 동안의 폴백이다. */
+  color-scheme: light dark;
 
-  /* Linear의 실제 앱 UI는 마케팅 페이지의 그라디언트/글로우가 아니라 거의
-     완전히 평평한 다크 서페이스다 — 그래서 색은 밝기 단계만 미세하게
-     다른 무채색에 가깝게, 경계는 배경보다 밝은 반투명 흰색 한 겹으로만
-     표현한다 (진한 회색 테두리 대신). */
-  --bg: #08090a;
-  --surface: #0e0f11;
-  --surface-hover: #17181b;
-  --surface-raised: #1c1d20;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --text: #f4f5f6;
-  --text-dim: #8a8f98;
-  --text-faint: #62666d;
+  /* macOS App Store(Big Sur 이후)를 레퍼런스로 삼는다 — 마케팅 이미지가
+     아니라 실제 앱 UI의 흰 서페이스, 옅은 회색 위계, 애플 블루 한 가지로만
+     쓰는 악센트, 캡슐형 GET/OPEN 버튼. */
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-hover: #f5f5f7;
+  --surface-raised: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text: #1d1d1f;
+  --text-dim: #6e6e73;
+  --text-faint: #86868b;
 
-  /* #5e6ad2 — Linear의 시그니처 인디고. 카드마다 다른 --accent를 받지만
-     기본값은 이 색으로 통일해 "브랜드 하나, 서비스마다 미세한 변주"가
-     되게 한다. */
-  --accent-default: #5e6ad2;
-  --danger: #eb5757;
-  --ok: #4cb782;
+  /* #0071e3 — App Store의 GET/OPEN 버튼·링크에 쓰이는 애플 블루. 카드마다
+     다른 --accent를 받지만 기본값은 이 색으로 통일한다. */
+  --accent-default: #0071e3;
+  --danger: #ff3b30;
+  --ok: #30d158;
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  /* 팝업 카드 전용 — 떠 있는 독립된 창이라는 인상을 주려고 앱 안의 가장 큰
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  /* 팝업 카드 전용 — 떠 있는 독립된 시트라는 인상을 주려고 앱 안의 가장 큰
      반경(--radius-lg)보다 한 단계 더 크게 잡는다 (src/popup/popup.css). */
-  --radius-xl: 14px;
+  --radius-xl: 20px;
+  /* GET/OPEN 버튼, 헤더의 보조 버튼 등 캡슐형 요소 전용. */
+  --radius-full: 999px;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.05), 0 12px 28px rgba(0, 0, 0, 0.1);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.12), 0 24px 64px rgba(0, 0, 0, 0.16);
+}
+
+/* prefers-color-scheme 미디어쿼리가 아니라 명시적 속성으로 다크를 켠다 —
+   src/main.tsx가 nativeTheme(electron/main.ts)의 판단을 IPC로 받아 이
+   속성을 직접 세팅한다. 오프스크린/비활성 창에서는 macOS의 다크모드 신호가
+   Chromium 렌더러의 prefers-color-scheme까지 실시간으로 안 붙는 경우를
+   실제로 겪어서(nativeTheme.shouldUseDarkColors는 true인데 렌더러의
+   matchMedia는 계속 false), 미디어쿼리에 기대지 않기로 했다. */
+:root[data-theme='dark'] {
+  /* macOS 다크 모드의 App Store — 순검정이 아니라 애플 시스템 그레이
+     단계(#1c1c1e/#2c2c2e/#3a3a3c)를 쓰고, 다크 모드 전용으로 더 밝힌
+     시스템 블루(#0a84ff)를 쓴다(라이트 모드의 #0071e3는 어두운 배경 위에서
+     채도가 죽어 보인다). */
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --surface-hover: #3a3a3c;
+  --surface-raised: #2c2c2e;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f5f5f7;
+  --text-dim: #98989d;
+  --text-faint: #7c7c80;
+
+  --accent-default: #0a84ff;
+  --danger: #ff453a;
+  --ok: #32d74b;
+
+  /* 어두운 배경에서는 옅은 그림자가 거의 안 보여서 옅은 서페이스 대신
+     테두리가 카드 경계를 더 많이 책임진다 — 알파를 올려 그 몫을 보정한다. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45), 0 24px 64px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -42,10 +84,8 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  /* 네이티브 macOS 유틸리티라 시스템 폰트를 그대로 쓴다 — Linear 데스크톱
-     앱도 플랫폼 폰트에 최대한 가깝게 맞추는 쪽이지, 웹폰트로 낯설게
-     만들지 않는다. 대신 자간/굵기로 Linear 특유의 "촘촘하고 단단한"
-     인상을 낸다. */
+  /* 네이티브 macOS 유틸리티라 시스템 폰트를 그대로 쓴다 — App Store 본체도
+     SF Pro Display/Text를 그대로 쓰지, 웹폰트로 낯설게 만들지 않는다. */
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Apple SD Gothic Neo', 'Pretendard', sans-serif;
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
@@ -71,9 +111,9 @@ html.is-popup body {
   }
 }
 
-/* 키보드 포커스는 그동안 브라우저 기본 파란 링에 맡겨져 있었다 — 다크
-   인디고 팔레트 위에서 튀는 데다 이 앱의 나머지 어떤 것과도 안 어울렸다.
-   `:focus-visible`이라 마우스 클릭에서는 안 뜨고 키보드 탐색에서만 뜬다. */
+/* 키보드 포커스는 macOS 네이티브 포커스 링과 같은 애플 블루 2px 아웃라인을
+   쓴다. `:focus-visible`이라 마우스 클릭에서는 안 뜨고 키보드 탐색에서만
+   뜬다. */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
@@ -96,57 +136,91 @@ input:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--border);
 }
 
 .app-header h1 {
-  font-size: 15px;
-  font-weight: 590;
-  margin: 0 0 4px;
-  letter-spacing: -0.01em;
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  letter-spacing: -0.022em;
 }
 
 .app-header p {
   margin: 0;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .header-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .header-button {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
+  border: none;
+  background: var(--surface-hover);
+  color: var(--text);
+  border-radius: var(--radius-full);
+  padding: 7px 14px;
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  transition: background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease);
+  transition: background 100ms var(--ease);
 }
 
 .header-button:hover {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-hover));
+}
+
+/* macOS 세그먼트 컨트롤(NSSegmentedControl) 톤 — 옅은 회색 트랙 위에서
+   선택된 항목만 흰(다크에서는 --surface) 알약 배경 + 옅은 그림자로 뜬다. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
   background: var(--surface-hover);
-  border-color: var(--border-strong);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.theme-switch-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background 120ms var(--ease), color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+
+.theme-switch-btn:hover {
   color: var(--text);
+}
+
+.theme-switch-btn.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
 }
 
 /* ---- Store grid ---- */
 
 .service-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .service-card {
@@ -160,20 +234,21 @@ input:focus-visible {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  box-shadow: var(--shadow-card);
+  padding: 18px;
   cursor: pointer;
   color: var(--text);
   font: inherit;
   opacity: 0;
-  animation: card-in 260ms var(--ease) forwards;
+  animation: card-in 320ms var(--ease) forwards;
   animation-delay: calc(var(--i, 0) * 28ms);
-  transition: background 120ms var(--ease), border-color 120ms var(--ease);
+  transition: box-shadow 180ms var(--ease), border-color 180ms var(--ease), transform 180ms var(--ease);
 }
 
 @keyframes card-in {
   from {
     opacity: 0;
-    transform: translateY(3px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -182,67 +257,76 @@ input:focus-visible {
 }
 
 .service-card:hover {
-  background: var(--surface-hover);
   border-color: var(--border-strong);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
 }
 
 .service-card.is-active {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
 .service-card-icon {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  font-size: 22px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
 }
 
 .service-card-name {
-  font-size: 13px;
-  font-weight: 590;
-  letter-spacing: -0.005em;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
 }
 
 .service-card-tagline {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-dim);
-  line-height: 1.5;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .service-card-status {
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 6px;
 }
 
+/* GET(꺼짐)/OPEN(켜짐) 캡슐 — App Store 그리드 타일 하단의 그 버튼. */
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-faint);
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-default) 10%, var(--surface-hover));
+  color: var(--accent-default);
+  border: 1px solid color-mix(in srgb, var(--accent-default) 22%, transparent);
 }
 
 .status-dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--text-faint);
+  background: currentColor;
   flex-shrink: 0;
   vertical-align: middle;
 }
 
-.status-pill-active .status-dot {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
-}
-
 .status-pill-active {
-  color: var(--text-dim);
+  background: var(--accent-default);
+  color: #ffffff;
+  border-color: var(--accent-default);
 }
 
 .empty-state {
@@ -257,49 +341,50 @@ input:focus-visible {
 .detail-page {
   --accent: var(--accent-default);
   /* margin:0 auto였을 때는 .app-shell의 비대칭 여백(트래픽라이트 때문에
-     왼쪽 92px/오른쪽 36px) 안에서 이 680px 블록이 다시 가운데 정렬돼서,
+     왼쪽 92px/오른쪽 36px) 안에서 이 블록이 다시 가운데 정렬돼서,
      스토어 화면의 왼쪽 끝(x:92)과 상세 화면 본문의 왼쪽 끝이 서로 달랐다 —
      서비스를 열 때마다 화면이 미세하게 좌우로 튀어 보이는 원인이었다.
      가운데 정렬을 버리고 같은 왼쪽 기준선에 붙여서, 스토어 헤더·그리드·
      상세 본문이 항상 같은 x에서 시작하게 한다. */
-  max-width: 680px;
+  max-width: 720px;
   animation: card-in 200ms var(--ease);
 }
 
 .back-button {
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: var(--accent-default);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
   margin-bottom: 20px;
-  transition: color 100ms var(--ease);
+  transition: opacity 100ms var(--ease);
 }
 
 .back-button:hover {
-  color: var(--text);
+  opacity: 0.7;
 }
 
 .detail-header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  gap: 18px;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--border);
 }
 
 .detail-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  font-size: 30px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
   flex-shrink: 0;
 }
 
@@ -309,41 +394,45 @@ input:focus-visible {
 }
 
 .detail-heading h1 {
-  margin: 0 0 2px;
-  font-size: 16px;
-  font-weight: 590;
-  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .detail-tagline {
   margin: 0;
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
+/* GET(꺼짐)/OPEN(켜짐) 캡슐 — 상세 페이지용 큰 버전. */
 .toggle-button {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-default) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-default) 10%, var(--surface-hover));
+  color: var(--accent-default);
+  border-radius: var(--radius-full);
+  padding: 8px 18px;
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease);
+  transition: background 100ms var(--ease), filter 100ms var(--ease);
 }
 
 .toggle-button:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
+  background: color-mix(in srgb, var(--accent-default) 16%, var(--surface-hover));
 }
 
 .toggle-button.is-active {
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
-  color: var(--ok);
+  background: var(--accent-default);
+  border-color: var(--accent-default);
+  color: #ffffff;
+}
+
+.toggle-button.is-active:hover {
+  filter: brightness(0.92);
 }
 
 .toggle-button .status-dot {
@@ -351,56 +440,55 @@ input:focus-visible {
 }
 
 .detail-section {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .detail-section h2 {
-  font-size: 11px;
-  font-weight: 590;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
   margin: 0 0 10px;
 }
 
 .detail-section p {
   margin: 0;
-  line-height: 1.65;
-  font-size: 13px;
+  line-height: 1.6;
+  font-size: 13.5px;
   color: var(--text);
 }
 
 .detail-section p + p {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .detail-section ul,
 .detail-section ol {
   margin: 0;
   padding-left: 18px;
-  line-height: 1.7;
-  font-size: 13px;
+  line-height: 1.65;
+  font-size: 13.5px;
 }
 
 .detail-section li {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .muted {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .shortcut-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .shortcut-table th {
   text-align: left;
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
   padding: 0 10px 8px 0;
   border-bottom: 1px solid var(--border);
 }
@@ -421,14 +509,13 @@ kbd {
   justify-content: center;
   min-width: 20px;
   height: 20px;
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border: 1px solid var(--border-strong);
-  border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 0 6px;
   font-family: inherit;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -449,18 +536,18 @@ kbd {
   right: 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   z-index: 50;
 }
 
 .toast {
   background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  padding: 9px 14px;
-  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 16px;
+  font-size: 12.5px;
   max-width: 320px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-float);
   animation: toast-in 180ms var(--ease);
 }
 
@@ -476,6 +563,6 @@ kbd {
 }
 
 .toast-error {
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong));
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
   color: var(--danger);
 }

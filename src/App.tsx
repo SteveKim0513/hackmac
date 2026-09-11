@@ -1,19 +1,27 @@
 import { useEffect, useState } from 'react';
-import type { ServiceMeta } from '../shared/types';
+import type { ServiceMeta, ThemePreference } from '../shared/types';
 import { ServiceGrid } from './store/ServiceGrid';
 import { ServiceDetail } from './detail/ServiceDetail';
 import { ToastStack, useToasts } from './components/Toast';
+import { ThemeSwitch } from './components/ThemeSwitch';
 
 type View = { name: 'store' } | { name: 'detail'; serviceId: string };
 
 export default function App() {
   const [services, setServices] = useState<ServiceMeta[]>([]);
   const [view, setView] = useState<View>({ name: 'store' });
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
   const { toasts, push, dismiss } = useToasts();
 
   useEffect(() => {
     void window.playbook.listServices().then(setServices);
+    void window.playbook.getThemePreference().then(setThemePreferenceState);
   }, []);
+
+  const handleThemeChange = (pref: ThemePreference) => {
+    setThemePreferenceState(pref); // 낙관적 반영 — nativeTheme 갱신은 IPC 왕복 없이 즉시 눈에 보여야 자연스럽다.
+    void window.playbook.setThemePreference(pref);
+  };
 
   const handleActivate = async (service: ServiceMeta) => {
     const result = await window.playbook.activateService(service.id);
@@ -60,6 +68,7 @@ export default function App() {
               <p>이 Mac, 사실 훨씬 더 많은 걸 할 수 있어요.</p>
             </div>
             <div className="header-actions">
+              <ThemeSwitch value={themePreference} onChange={handleThemeChange} />
               <button className="header-button" onClick={() => void handleCheckForUpdates()}>
                 업데이트 확인
               </button>

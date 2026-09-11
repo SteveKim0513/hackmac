@@ -2,15 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import { appLog, describeError } from './log';
+import type { ThemePreference } from '../shared/types';
 
 export interface AppSettings {
   /** Service ids the user has turned on — restored on next launch so
    * hotkeys keep working without the app needing to stay in the foreground. */
   activeServiceIds: string[];
+  /** 사용자가 고른 라이트/다크/시스템 설정 — restored on next launch so the
+   * window doesn't flash back to "시스템" before the user's choice loads. */
+  themePreference: ThemePreference;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   activeServiceIds: [],
+  themePreference: 'system',
 };
 
 function settingsPath(): string {
@@ -32,7 +37,11 @@ export function loadSettings(): AppSettings {
   }
 }
 
-export function saveSettings(next: AppSettings): void {
+/** 부분 patch를 현재 저장된 값 위에 merge해서 쓴다 — 서로 다른 모듈(서비스
+ * 켜기/끄기, 테마 선택)이 각자 자기 필드만 넘겨도 상대 필드를 덮어쓰지
+ * 않게 하려는 것. */
+export function saveSettings(patch: Partial<AppSettings>): void {
+  const next: AppSettings = { ...loadSettings(), ...patch };
   try {
     fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
     fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2));

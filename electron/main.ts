@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Tray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -9,6 +9,8 @@ import { logsRoot } from './exec-log';
 import { checkForUpdatesManually, initAutoUpdate } from './updater';
 import { appLog, describeError } from './log';
 import { startPopupServer, stopPopupServer } from './popupServer';
+import { loadSettings, saveSettings } from './settings';
+import type { ThemePreference } from '../shared/types';
 
 // 백그라운드 트레이 유틸리티라, 예상 못한 예외 하나 때문에 이미 켜둔 서비스의
 // 단축키가 전부 죽어버리면 안 된다 — 원인은 로그로 남기고 프로세스는 계속
@@ -63,7 +65,10 @@ function createMainWindow() {
     // "HackMac" 제목 사이 간격이 OS 버전에 따라 들쭉날쭉해진다 — 직접 고정해
     // src/theme.css의 .app-shell 왼쪽 여백(92px)과 정확히 맞춘다.
     trafficLightPosition: { x: 20, y: 20 },
-    backgroundColor: '#08090a', // src/theme.css의 --bg와 맞춰 초기 로드시 깜빡임 방지
+    // src/theme.css의 --bg(라이트 #fbfbfd/다크 #1c1c1e)와 맞춰 초기 로드시
+    // 깜빡임 방지 — nativeTheme.themeSource는 whenReady 초입에서 이미
+    // 저장된 사용자 설정으로 세팅해둔 뒤라 여기서 바로 현재 값을 읽을 수 있다.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#fbfbfd',
     // Playwright는 CDP로 창 내용을 그대로 읽으므로 화면에 보일 필요가 없다 —
     // 실제 디스플레이 밖 좌표에 띄워 화면을 가리지 않는다.
     ...(E2E_QUIET ? { x: -3000, y: -3000 } : {}),
@@ -125,6 +130,23 @@ app.whenReady().then(() => {
     appLog.info('main', '이미 실행 중인 인스턴스가 있어 종료함 (single instance lock)');
     return;
   }
+
+  // 창을 만들기 전에 먼저 적용해야 위 backgroundColor 계산과 트래픽라이트
+  // 등 네이티브 크롬이 처음부터 올바른 밝기로 뜬다.
+  nativeTheme.themeSource = loadSettings().themePreference;
+  // 렌더러가 `prefers-color-scheme` 미디어쿼리만으로 이 값을 알아내는 데
+  // 의존하지 않는다 — 오프스크린으로 뜨는 창(E2E, 트레이에서 조용히 열기)에서
+  // macOS의 다크모드 신호가 Chromium 렌더러까지 실시간으로 안 붙는 경우를
+  // 실제로 겪었다(nativeTheme.shouldUseDarkColors는 true인데 렌더러의
+  // matchMedia는 계속 false). 그래서 src/main.tsx가 이 이벤트를 IPC로 직접
+  // 받아 `<html data-theme>`를 강제로 세팅하고, src/theme.css는 미디어쿼리
+  // 대신 이 속성을 기준으로 다크 토큰을 켠다.
+  nativeTheme.on('updated', () => {
+    const isDark = nativeTheme.shouldUseDarkColors;
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('theme:changed', isDark);
+    }
+  });
 
   // 메뉴바 트레이 아이콘만 쓰는 백그라운드 유틸리티라 Dock 아이콘은 안 띄운다.
   // 패키지 빌드는 Info.plist의 LSUIElement(build.mac.extendInfo)가 이걸
@@ -190,6 +212,15 @@ ipcMain.handle('services:activate', (_e, id: string) => serviceCatalog.activate(
 ipcMain.handle('services:deactivate', (_e, id: string) => serviceCatalog.deactivate(id));
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+ipcMain.handle('theme:get', () => loadSettings().themePreference);
+
+ipcMain.handle('theme:set', (_e, pref: ThemePreference) => {
+  nativeTheme.themeSource = pref;
+  saveSettings({ themePreference: pref });
+});
+
+ipcMain.handle('theme:getEffectiveDark', () => nativeTheme.shouldUseDarkColors);
 
 ipcMain.handle('updates:check', () => checkForUpdatesManually());
 

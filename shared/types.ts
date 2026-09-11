@@ -49,6 +49,12 @@ export interface ActivateResult {
   errors: { shortcutId: string; name: string; message: string }[];
 }
 
+/** `system`은 macOS의 현재 라이트/다크 설정을 그대로 따라간다 — `electron/main.ts`가
+ * 이 값을 `nativeTheme.themeSource`에 그대로 대입하면, 렌더러의
+ * `prefers-color-scheme` 미디어쿼리(`src/theme.css`)가 창 리로드 없이
+ * 즉시 갱신된다. */
+export type ThemePreference = 'light' | 'dark' | 'system';
+
 export type UpdateCheckResult =
   | { status: 'up-to-date' }
   | { status: 'downloading'; version: string }
