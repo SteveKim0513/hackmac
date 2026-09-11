@@ -39,6 +39,9 @@ export interface RunResult {
   code: number | null;
   stdout: string;
   stderr: string;
+  /** 이번 실행의 상세 로그가 담긴 파일 경로 — app.log의 요약 한 줄에서
+   * 이 파일로 바로 점프할 수 있게 항상 채워둔다. */
+  logPath: string;
 }
 
 export interface ActivateResult {
@@ -51,3 +54,17 @@ export type UpdateCheckResult =
   | { status: 'downloading'; version: string }
   | { status: 'error'; message: string }
   | { status: 'disabled' };
+
+/** Interactive moments a service script needs mid-run — the popup window
+ * these render in replaces `display dialog`/`choose from list` (see
+ * docs/design.md). `select` covers `choose from list`, `prompt` covers
+ * `display dialog ... default answer`, `confirm` covers a plain
+ * `display dialog` with only buttons. */
+export type PopupRequest =
+  | { kind: 'select'; title: string; prompt: string; okLabel: string; cancelLabel: string; items: string[]; defaultItem: string | null }
+  | { kind: 'prompt'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string }
+  | { kind: 'confirm'; title: string; prompt: string; okLabel: string; cancelLabel: string };
+
+/** `ok: false` means the user cancelled (Escape, cancel button, or closed
+ * the window) — same meaning as AppleScript's user-cancelled error -128. */
+export type PopupResult = { ok: true; value: string | null } | { ok: false; value: null };

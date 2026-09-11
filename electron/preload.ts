@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ActivateResult, ServiceMeta, UpdateCheckResult } from '../shared/types';
+import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, UpdateCheckResult } from '../shared/types';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -13,3 +13,17 @@ const api = {
 export type PlaybookApi = typeof api;
 
 contextBridge.exposeInMainWorld('playbook', api);
+
+// electron/popupWindow.ts가 띄우는 별도 팝업 창(src/popup/PopupApp.tsx)에서만
+// 쓰는 최소 브리지 — 메인 창의 `playbook`과 성격이 달라 이름을 분리했다.
+const popupApi = {
+  ready: (): void => ipcRenderer.send('popup:ready'),
+  onInit: (callback: (req: PopupRequest) => void): void => {
+    ipcRenderer.on('popup:init', (_e, req: PopupRequest) => callback(req));
+  },
+  resolve: (result: PopupResult): void => ipcRenderer.send('popup:resolve', result),
+};
+
+export type HackmacPopupApi = typeof popupApi;
+
+contextBridge.exposeInMainWorld('hackmacPopup', popupApi);

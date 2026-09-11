@@ -1,0 +1,22 @@
+#!/bin/zsh
+# 서비스 스크립트가 선택/입력 팝업을 띄울 때 쓰는 진입점.
+# osascript "choose from list" / "display dialog" 대신 이걸 부른다 — 실제
+# 창은 Electron이 그린다 (docs/design.md, electron/popupWindow.ts).
+#
+# 사용법:
+#   "$HACKMAC_POPUP" select  --title T --prompt P --ok O --cancel C [--default D] -- item1 item2 ...
+#   "$HACKMAC_POPUP" prompt  --title T --prompt P --ok O --cancel C [--default D]
+#   "$HACKMAC_POPUP" confirm --title T --prompt P --ok O --cancel C
+#
+# 표준출력으로 선택/입력값을 돌려주고, 취소되면(사용자가 취소 버튼을 누르거나
+# Esc를 누르면) 종료 코드 1을 반환한다 — 호출부에서 `$?`로 분기한다.
+#
+# HACKMAC_ELECTRON_BIN / HACKMAC_POPUP_CLIENT_JS는 electron/runner.ts가 스크립트를
+# 실행할 때 넣어주는 환경변수다 — 이 둘이 없으면 HackMac이 아닌 셸에서 직접
+# 실행된 것이므로 여기서 끝낸다.
+if [[ -z "$HACKMAC_ELECTRON_BIN" || -z "$HACKMAC_POPUP_CLIENT_JS" ]]; then
+  echo "hackmac-popup: HackMac 앱 안에서 실행된 스크립트가 아니면 쓸 수 없어요" >&2
+  exit 2
+fi
+
+exec env ELECTRON_RUN_AS_NODE=1 "$HACKMAC_ELECTRON_BIN" "$HACKMAC_POPUP_CLIENT_JS" "$@"

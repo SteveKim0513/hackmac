@@ -23,7 +23,13 @@ export function ServiceDetail({ service, onBack, onToggle }: Props) {
           className={`toggle-button ${service.isActive ? 'is-active' : ''}`}
           onClick={() => onToggle(service)}
         >
-          {service.isActive ? '● 켜짐' : '꺼짐'}
+          {service.isActive ? (
+            <>
+              <span className="status-dot" /> 켜짐
+            </>
+          ) : (
+            '꺼짐'
+          )}
         </button>
       </header>
 

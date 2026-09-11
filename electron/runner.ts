@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { cleanupOldLogs, startExecLog, zshVersion } from './exec-log';
+import { popupClientJsPath, popupSocketPath, popupWrapperPath } from './paths';
 import type { RunResult } from '../shared/types';
 
 const TIMEOUT_MS = 30_000;
@@ -27,7 +28,7 @@ function lineSplitter(onLine: (line: string) => void) {
   };
 }
 
-export function runScript(filePath: string): Promise<RunResult> {
+export function runScript(filePath: string, serviceId: string): Promise<RunResult> {
   return new Promise((resolve) => {
     try {
       fs.chmodSync(filePath, 0o755);
@@ -35,7 +36,7 @@ export function runScript(filePath: string): Promise<RunResult> {
       // Bundled resources are already read-only-ish; best-effort only.
     }
 
-    const log = startExecLog(filePath);
+    const log = startExecLog(filePath, serviceId);
     log.line(`실행 시작: ${filePath}`);
     log.line(`셸 버전: ${zshVersion()}`);
     log.line(`사용자 폴더: ${os.homedir()}`);
@@ -44,10 +45,19 @@ export function runScript(filePath: string): Promise<RunResult> {
     // cwd is the home directory, not Electron's own app-bundle path — closer
     // to what a shell prompt starts in, and keeps any relative path in a
     // script from resolving against an app-internal folder by accident.
+    // 스크립트가 선택/입력 팝업이 필요하면 osascript 네이티브 다이얼로그
+    // 대신 이 세 값으로 electron/popupServer.ts에 붙는다 — 자세한 프로토콜은
+    // resources/bin/hackmac-popup, docs/design.md 참고.
     const child = spawn('/bin/zsh', [filePath], {
       timeout: TIMEOUT_MS,
       cwd: os.homedir(),
-      env: process.env,
+      env: {
+        ...process.env,
+        HACKMAC_POPUP: popupWrapperPath(),
+        HACKMAC_POPUP_SOCK: popupSocketPath(),
+        HACKMAC_ELECTRON_BIN: process.execPath,
+        HACKMAC_POPUP_CLIENT_JS: popupClientJsPath(),
+      },
     });
     log.line(`프로세스 기동: pid=${child.pid ?? '없음'}`);
 
@@ -77,7 +87,7 @@ export function runScript(filePath: string): Promise<RunResult> {
       log.line('스크립트 종료');
       log.line(`종료 코드: ${code ?? '없음'}`);
       log.close();
-      resolve({ success: code === 0, code, stdout, stderr });
+      resolve({ success: code === 0, code, stdout, stderr, logPath: log.path });
     });
     child.on('error', (err) => {
       stdoutLog.flush();
@@ -85,7 +95,7 @@ export function runScript(filePath: string): Promise<RunResult> {
       log.line(`실행 오류: ${String(err)}`);
       log.line('스크립트 종료');
       log.close();
-      resolve({ success: false, code: null, stdout, stderr: String(err) });
+      resolve({ success: false, code: null, stdout, stderr: String(err), logPath: log.path });
     });
   });
 }

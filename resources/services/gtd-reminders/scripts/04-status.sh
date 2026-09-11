@@ -1,9 +1,11 @@
 #!/bin/zsh
 # @svc-name: 업무 현황보기
 # @svc-hotkey: Alt+4
-# @svc-description: 지금 뭐가 얼마나 밀렸는지 궁금할 때 누르세요. 대기·진행중·오늘 완료 개수를 한눈에 보여줘요.
+# @svc-description: 지금 뭐가 얼마나 밀렸는지 궁금할 때 누르세요. 대기·진행중·오늘 완료 개수는 물론, 진행중인 일마다 이름과 경과 시간까지 보여줘요.
 
-osascript <<'APPLESCRIPT'
+# 순수 조회 + 요약 문자열 조립까지는 osascript가 담당하고, 화면에 보여주는
+# 건 그 결과를 받아 "$HACKMAC_POPUP"이 담당한다.
+summary=$(osascript <<'APPLESCRIPT'
 try
   set waitingCount to 0
   set ongoingCount to 0
@@ -45,21 +47,26 @@ try
     end repeat
   end tell
 
+  log "Reminders 조회 완료: 진행중 " & ongoingCount & "개, 완료 " & doneTodayCount & "개, 대기 " & waitingCount & "개"
+
   set summary to "진행중 " & ongoingCount & "개 · 완료 " & doneTodayCount & "개 · 대기 " & waitingCount & "개"
 
-  if ongoingCount > 0 and ongoingCount ≤ 3 then
+  if ongoingCount > 0 then
     set AppleScript's text item delimiters to linefeed
     set detailText to detailLines as string
     set AppleScript's text item delimiters to ""
     set summary to summary & linefeed & linefeed & detailText
   end if
 
-  activate
-  display dialog summary with title "📊 업무 현황" buttons {"확인"} default button "확인" with icon note
+  return summary
 on error errText number errNum
-  if errNum is not -128 then
-    log errText
-    display notification errText with title "⚠️ 업무 현황보기 실패"
-  end if
+  log errText
+  display notification errText with title "⚠️ 업무 현황보기 실패"
+  return ""
 end try
 APPLESCRIPT
+)
+
+if [[ -n "$summary" ]]; then
+  "$HACKMAC_POPUP" confirm --title "📊 업무 현황" --prompt "$summary" --ok "확인" --cancel "" > /dev/null
+fi

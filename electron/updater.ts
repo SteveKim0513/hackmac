@@ -1,7 +1,6 @@
 import { app, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import fs from 'node:fs';
-import path from 'node:path';
+import { createFileLogger, describeError } from './log';
 import type { UpdateCheckResult } from '../shared/types';
 
 /**
@@ -20,29 +19,21 @@ const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 // A packaged app launched from Finder has no terminal attached, so plain
 // console.log/console.error go nowhere — nothing captures them, not even
 // Console.app (confirmed by checking `log show` for this process: zero
-// output despite the code definitely running). Writing to a real file is
-// the only way a background check's outcome is ever inspectable after the
-// fact. electron-updater's own internal logging (`this._logger`) goes
-// through this too, via `autoUpdater.logger` below — that's normally the
-// most useful half of it (its default logger is also just `console`).
-function updaterLogPath(): string {
-  return path.join(app.getPath('logs'), 'updater.log');
-}
-
-function writeLog(level: string, message: string) {
-  try {
-    fs.mkdirSync(path.dirname(updaterLogPath()), { recursive: true });
-    fs.appendFileSync(updaterLogPath(), `[${new Date().toISOString()}] [${level}] ${message}\n`);
-  } catch {
-    // best-effort only — a broken log write must never take down the updater
-  }
-}
-
+// output despite the code definitely running). electron-updater's own
+// internal logging (`this._logger`) goes through this file too, via
+// `autoUpdater.logger` below — that's normally the most useful half of it
+// (its default logger is also just `console`). Kept as its own file
+// (rather than folded into electron/log.ts's shared app.log) since it's a
+// dedicated, high-signal stream someone debugging "update didn't apply"
+// wants to open on its own. electron-updater's Logger interface takes a
+// single message arg (no tag), so this adapts the shared tag+message writer
+// to that shape instead of changing the shared writer's signature.
+const updaterLog = createFileLogger('updater.log');
 const fileLogger = {
-  info: (message?: unknown) => writeLog('info', String(message)),
-  warn: (message?: unknown) => writeLog('warn', String(message)),
-  error: (message?: unknown) => writeLog('error', String(message)),
-  debug: (message?: unknown) => writeLog('debug', String(message)),
+  info: (message?: unknown) => updaterLog.info('updater', String(message)),
+  warn: (message?: unknown) => updaterLog.warn('updater', String(message)),
+  error: (message?: unknown) => updaterLog.error('updater', String(message)),
+  debug: (message?: unknown) => updaterLog.debug('updater', String(message)),
 };
 
 async function promptRestart(version: string) {
@@ -76,11 +67,17 @@ export function initAutoUpdate(): void {
   });
   autoUpdater.on('error', (err) => {
     // Background failures must never interrupt the user — log and retry on
-    // the next interval.
-    fileLogger.error(`배경 체크 실패: ${err?.message ?? err}`);
+    // the next interval. Full stack (not just err.message) is what actually
+    // lets you tell "network down" apart from "release asset malformed"
+    // apart from "code signature mismatch" after the fact.
+    fileLogger.error(`배경 체크 실패: ${describeError(err)}`);
   });
 
   fileLogger.info(`자동 업데이트 시작 — 현재 버전 v${app.getVersion()}, ${FIRST_CHECK_DELAY_MS / 1000}초 후 첫 확인, 이후 ${CHECK_INTERVAL_MS / 3600_000}시간마다`);
+  // checkForUpdates()'s own rejection is swallowed here because the 'error'
+  // event above already logs the same failure — this catch exists only so
+  // an unhandled-rejection warning doesn't show up for a routine background
+  // check.
   setTimeout(() => void autoUpdater.checkForUpdates().catch(() => {}), FIRST_CHECK_DELAY_MS);
   setInterval(() => void autoUpdater.checkForUpdates().catch(() => {}), CHECK_INTERVAL_MS);
 }
@@ -106,12 +103,21 @@ export function checkForUpdatesManually(): Promise<UpdateCheckResult> {
     };
     const onAvailable = (info: { version: string }) => settle({ status: 'downloading', version: info.version });
     const onNotAvailable = () => settle({ status: 'up-to-date' });
-    const onError = (err: Error) => settle({ status: 'error', message: err?.message ?? String(err) });
-    const timer = setTimeout(() => settle({ status: 'error', message: '응답이 없어요' }), MANUAL_CHECK_TIMEOUT_MS);
+    const onError = (err: Error) => {
+      fileLogger.error(`수동 확인 실패: ${describeError(err)}`);
+      settle({ status: 'error', message: err?.message ?? String(err) });
+    };
+    const timer = setTimeout(() => {
+      fileLogger.warn(`수동 확인 타임아웃 (${MANUAL_CHECK_TIMEOUT_MS}ms 내 응답 없음)`);
+      settle({ status: 'error', message: '응답이 없어요' });
+    }, MANUAL_CHECK_TIMEOUT_MS);
 
     autoUpdater.once('update-available', onAvailable);
     autoUpdater.once('update-not-available', onNotAvailable);
     autoUpdater.once('error', onError);
-    autoUpdater.checkForUpdates().catch((err) => settle({ status: 'error', message: String(err?.message ?? err) }));
+    autoUpdater.checkForUpdates().catch((err) => {
+      fileLogger.error(`수동 확인 checkForUpdates() 거부: ${describeError(err)}`);
+      settle({ status: 'error', message: String(err?.message ?? err) });
+    });
   });
 }

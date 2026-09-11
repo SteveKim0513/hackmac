@@ -1,14 +1,35 @@
 :root {
   color-scheme: dark;
-  --bg: #0c0c10;
-  --surface: #17171d;
-  --surface-hover: #1e1e26;
-  --border: #2a2a33;
-  --text: #f2f2f5;
-  --text-dim: #9a9aa5;
-  --accent-default: #6c8cff;
-  --danger: #ff6b6b;
-  --ok: #57d38c;
+
+  /* Linear의 실제 앱 UI는 마케팅 페이지의 그라디언트/글로우가 아니라 거의
+     완전히 평평한 다크 서페이스다 — 그래서 색은 밝기 단계만 미세하게
+     다른 무채색에 가깝게, 경계는 배경보다 밝은 반투명 흰색 한 겹으로만
+     표현한다 (진한 회색 테두리 대신). */
+  --bg: #08090a;
+  --surface: #0e0f11;
+  --surface-hover: #17181b;
+  --surface-raised: #1c1d20;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --text: #f4f5f6;
+  --text-dim: #8a8f98;
+  --text-faint: #62666d;
+
+  /* #5e6ad2 — Linear의 시그니처 인디고. 카드마다 다른 --accent를 받지만
+     기본값은 이 색으로 통일해 "브랜드 하나, 서비스마다 미세한 변주"가
+     되게 한다. */
+  --accent-default: #5e6ad2;
+  --danger: #eb5757;
+  --ok: #4cb782;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  /* 팝업 카드 전용 — 떠 있는 독립된 창이라는 인상을 주려고 앱 안의 가장 큰
+     반경(--radius-lg)보다 한 단계 더 크게 잡는다 (src/popup/popup.css). */
+  --radius-xl: 14px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -21,7 +42,12 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
+  /* 네이티브 macOS 유틸리티라 시스템 폰트를 그대로 쓴다 — Linear 데스크톱
+     앱도 플랫폼 폰트에 최대한 가깝게 맞추는 쪽이지, 웹폰트로 낯설게
+     만들지 않는다. 대신 자간/굵기로 Linear 특유의 "촘촘하고 단단한"
+     인상을 낸다. */
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Apple SD Gothic Neo', 'Pretendard', sans-serif;
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
@@ -30,10 +56,25 @@ body {
   height: 100%;
 }
 
+/* 팝업 창(frame:false + transparent:true)에서만 body를 투명하게 — 실제
+   카드 모양은 src/popup/popup.css의 .popup-card가 그린다. 메인 창은 이
+   클래스가 절대 안 붙으므로 --bg가 그대로 유지된다. */
+html.is-popup,
+html.is-popup body {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 .app-shell {
   height: 100%;
   overflow-y: auto;
-  padding: 28px 40px 60px;
+  padding: 24px 36px 60px;
 }
 
 .app-header {
@@ -41,42 +82,48 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header h1 {
-  font-size: 26px;
+  font-size: 15px;
+  font-weight: 590;
   margin: 0 0 4px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .app-header p {
   margin: 0;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .header-button {
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: transparent;
   color: var(--text-dim);
-  border-radius: 999px;
-  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
+  transition: background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease);
 }
 
 .header-button:hover {
   background: var(--surface-hover);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -84,8 +131,8 @@ body {
 
 .service-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+  gap: 10px;
 }
 
 .service-card {
@@ -94,81 +141,110 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 20px;
+  border-radius: var(--radius-lg);
+  padding: 16px;
   cursor: pointer;
   color: var(--text);
   font: inherit;
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  opacity: 0;
+  animation: card-in 260ms var(--ease) forwards;
+  animation-delay: calc(var(--i, 0) * 28ms);
+  transition: background 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .service-card:hover {
   background: var(--surface-hover);
-  border-color: var(--accent);
-  transform: translateY(-2px);
+  border-color: var(--border-strong);
 }
 
 .service-card.is-active {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
 .service-card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  font-size: 16px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
 
 .service-card-name {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.005em;
 }
 
 .service-card-tagline {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-dim);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .service-card-status {
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.status-dot {
   display: inline-block;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--border);
-  color: var(--text-dim);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.status-pill-active .status-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
 }
 
 .status-pill-active {
-  background: color-mix(in srgb, var(--ok) 24%, transparent);
-  color: var(--ok);
+  color: var(--text-dim);
 }
 
 .empty-state {
   color: var(--text-dim);
   padding: 40px;
   text-align: center;
+  font-size: 13px;
 }
 
 /* ---- Detail page ---- */
 
 .detail-page {
   --accent: var(--accent-default);
-  max-width: 720px;
+  max-width: 680px;
   margin: 0 auto;
+  animation: card-in 200ms var(--ease);
 }
 
 .back-button {
@@ -176,10 +252,11 @@ body {
   border: none;
   color: var(--text-dim);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   padding: 0;
   margin-bottom: 20px;
+  transition: color 100ms var(--ease);
 }
 
 .back-button:hover {
@@ -189,83 +266,101 @@ body {
 .detail-header {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-bottom: 28px;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .detail-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  font-size: 20px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
   flex-shrink: 0;
 }
 
 .detail-heading {
   flex: 1;
+  min-width: 0;
 }
 
 .detail-heading h1 {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
 }
 
 .detail-tagline {
   margin: 0;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .toggle-button {
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: transparent;
   color: var(--text-dim);
-  border-radius: 999px;
-  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
+  transition: background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease);
+}
+
+.toggle-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .toggle-button.is-active {
-  background: color-mix(in srgb, var(--ok) 20%, transparent);
-  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
   color: var(--ok);
 }
 
+.toggle-button .status-dot {
+  background: currentColor;
+}
+
 .detail-section {
-  margin-bottom: 26px;
+  margin-bottom: 24px;
 }
 
 .detail-section h2 {
-  font-size: 14px;
+  font-size: 11px;
+  font-weight: 590;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-dim);
+  color: var(--text-faint);
   margin: 0 0 10px;
 }
 
 .detail-section p {
   margin: 0;
-  line-height: 1.6;
-  font-size: 14px;
+  line-height: 1.65;
+  font-size: 13px;
+  color: var(--text);
 }
 
 .detail-section p + p {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .detail-section ul,
 .detail-section ol {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 18px;
   line-height: 1.7;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .detail-section li {
@@ -274,70 +369,94 @@ body {
 
 .muted {
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .shortcut-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .shortcut-table th {
   text-align: left;
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-weight: 500;
-  padding: 8px 10px;
+  padding: 0 10px 8px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .shortcut-table td {
-  padding: 10px;
+  padding: 10px 10px 10px 0;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
+.shortcut-table tr:last-child td {
+  border-bottom: none;
+}
+
 kbd {
-  display: inline-block;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0 6px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
 .hotkey-error {
   color: var(--danger);
   font-size: 11px;
-  margin-top: 4px;
-  max-width: 160px;
+  margin-top: 5px;
+  max-width: 180px;
+  line-height: 1.4;
 }
 
 /* ---- Toasts ---- */
 
 .toast-stack {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 20px;
+  right: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   z-index: 50;
 }
 
 .toast {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 13px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 9px 14px;
+  font-size: 12px;
   max-width: 320px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  animation: toast-in 180ms var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .toast-error {
-  border-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong));
   color: var(--danger);
 }

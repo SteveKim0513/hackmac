@@ -23,14 +23,14 @@ export function ServiceGrid({ services, onActivate, onOpen }: Props) {
 
   return (
     <div className="service-grid">
-      {services.map((service) => (
-        <ServiceCard key={service.id} service={service} onActivate={onActivate} onOpen={onOpen} />
+      {services.map((service, i) => (
+        <ServiceCard key={service.id} service={service} index={i} onActivate={onActivate} onOpen={onOpen} />
       ))}
     </div>
   );
 }
 
-function ServiceCard({ service, onActivate, onOpen }: CardProps) {
+function ServiceCard({ service, index, onActivate, onOpen }: CardProps & { index: number }) {
   const handleClick = () => {
     if (service.isActive) onOpen(service);
     else onActivate(service);
@@ -39,7 +39,7 @@ function ServiceCard({ service, onActivate, onOpen }: CardProps) {
   return (
     <button
       className={`service-card ${service.isActive ? 'is-active' : ''}`}
-      style={{ ['--accent' as string]: service.accentColor }}
+      style={{ ['--accent' as string]: service.accentColor, ['--i' as string]: index }}
       onClick={handleClick}
     >
       <div className="service-card-icon">{service.icon}</div>
@@ -47,9 +47,15 @@ function ServiceCard({ service, onActivate, onOpen }: CardProps) {
       <div className="service-card-tagline">{service.tagline}</div>
       <div className="service-card-status">
         {service.isActive ? (
-          <span className="status-pill status-pill-active">활성화됨 · 눌러서 자세히</span>
+          <span className="status-pill status-pill-active">
+            <span className="status-dot" />
+            활성화됨 · 눌러서 자세히
+          </span>
         ) : (
-          <span className="status-pill">눌러서 켜기</span>
+          <span className="status-pill">
+            <span className="status-dot" />
+            눌러서 켜기
+          </span>
         )}
       </div>
     </button>

@@ -1,6 +1,6 @@
 {
   "name": "hackmac",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "이 Mac으로 할 수 있는 일을 늘려주는 서비스 스토어",
   "main": "dist-electron/main.js",
   "author": "",
@@ -12,10 +12,11 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "predist": "npm run kill:dev --silent",
-    "dist": "npm run build && APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish never",
+    "dist": "npm run test:e2e && APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish never",
     "prerelease": "npm run kill:dev --silent",
-    "release": "npm run build && GH_TOKEN=$(gh auth token --user SteveKim0513) APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish always",
+    "release": "npm run test:e2e && GH_TOKEN=$(gh auth token --user SteveKim0513) APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish always",
     "typecheck": "tsc --noEmit",
+    "test:e2e": "npm run build && npm run kill:dev --silent && playwright test",
     "kill:dev": "pkill -f \"$(pwd)/node_modules/electron/dist/Electron.app\" 2>/dev/null; true"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.19.20",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -50,6 +52,10 @@
       {
         "from": "resources/services",
         "to": "services"
+      },
+      {
+        "from": "resources/bin",
+        "to": "bin"
       }
     ],
     "mac": {
@@ -59,7 +65,10 @@
         "zip"
       ],
       "category": "public.app-category.productivity",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "LSUIElement": true
+      }
     },
     "publish": {
       "provider": "github",
