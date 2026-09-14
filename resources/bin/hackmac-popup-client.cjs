@@ -47,7 +47,7 @@ function parseArgs(argv) {
       defaultItem: flags.default || null,
     };
   }
-  if (kind === 'prompt' || kind === 'date') {
+  if (kind === 'prompt') {
     return {
       kind,
       title: flags.title,
@@ -55,6 +55,17 @@ function parseArgs(argv) {
       okLabel: flags.ok,
       cancelLabel: flags.cancel,
       defaultValue: flags.default,
+    };
+  }
+  if (kind === 'date') {
+    return {
+      kind,
+      title: flags.title,
+      prompt: flags.prompt,
+      okLabel: flags.ok,
+      cancelLabel: flags.cancel,
+      defaultValue: flags.default,
+      markedDates: items,
     };
   }
   return {

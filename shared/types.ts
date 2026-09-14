@@ -68,12 +68,14 @@ export type UpdateCheckResult =
  * `display dialog` with only buttons, `date` covers picking a calendar
  * date (there is no osascript equivalent this replaces — AppleScript has
  * no built-in date-picker dialog). `date`'s `defaultValue`/result value is
- * always a `YYYY-MM-DD` string in the local timezone. */
+ * always a `YYYY-MM-DD` string in the local timezone; `markedDates` is an
+ * optional list of the same format the calendar dots under (e.g. days that
+ * already have data worth looking at). */
 export type PopupRequest =
   | { kind: 'select'; title: string; prompt: string; okLabel: string; cancelLabel: string; items: string[]; defaultItem: string | null }
   | { kind: 'prompt'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string }
   | { kind: 'confirm'; title: string; prompt: string; okLabel: string; cancelLabel: string }
-  | { kind: 'date'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string };
+  | { kind: 'date'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string; markedDates: string[] };
 
 /** `ok: false` means the user cancelled (Escape, cancel button, or closed
  * the window) — same meaning as AppleScript's user-cancelled error -128. */

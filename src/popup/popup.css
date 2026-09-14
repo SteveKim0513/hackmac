@@ -156,6 +156,7 @@
 }
 
 .popup-calendar-cell {
+  position: relative;
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -168,6 +169,21 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 80ms var(--ease);
+}
+
+.popup-calendar-dot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-default);
+}
+
+.popup-calendar-cell.is-active .popup-calendar-dot {
+  background: #ffffff;
 }
 
 .popup-calendar-cell.is-empty {

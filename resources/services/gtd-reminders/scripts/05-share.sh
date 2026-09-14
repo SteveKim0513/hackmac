@@ -3,10 +3,46 @@
 # @svc-hotkey: Alt+0
 # @svc-description: 하루를 정리하며 팀에 남길 때 누르세요. 달력에서 날짜를 고르면 그 날짜에 완료한 업무 내역이 클립보드에 복사돼요(오늘을 고르면 진행중·대기 현황까지 함께 담겨요). 채널에 붙여넣기(⌘V)만 하면 끝이에요.
 
-# 1. 공유할 날짜 선택 — 팝업은 HackMac 앱이 그린다("$HACKMAC_POPUP", CLAUDE.md
+# 1. 완료한 업무가 있는 날짜를 모아 달력에 점으로 표시할 수 있게 한다 —
+# 순수 조회(날짜별 whose 필터가 아니라 completion date 배열 통째 읽기)라
+# osascript를 그대로 쓴다.
+markedDatesRaw=$(osascript <<'APPLESCRIPT'
+set dateStrs to {}
+tell application "Reminders"
+  repeat with l in lists
+    if (name of l) starts with "GTD " then
+      set cds to completed of every reminder of l
+      set eds to completion date of every reminder of l
+      repeat with i from 1 to (count of cds)
+        if (item i of cds) is true then
+          set ed to item i of eds
+          if ed is not missing value then
+            set mStr to ((month of ed as integer) as string)
+            if (length of mStr) is 1 then set mStr to "0" & mStr
+            set dStr to ((day of ed) as string)
+            if (length of dStr) is 1 then set dStr to "0" & dStr
+            set end of dateStrs to (((year of ed) as string) & "-" & mStr & "-" & dStr)
+          end if
+        end if
+      end repeat
+    end if
+  end repeat
+end tell
+set AppleScript's text item delimiters to linefeed
+return dateStrs as text
+APPLESCRIPT
+)
+if [[ -n "$markedDatesRaw" ]]; then
+  markedDates=("${(@f)$(printf '%s\n' "$markedDatesRaw" | sort -u)}")
+else
+  markedDates=()
+fi
+echo "완료 업무가 있는 날짜 ${#markedDates[@]}일 조회 완료"
+
+# 2. 공유할 날짜 선택 — 팝업은 HackMac 앱이 그린다("$HACKMAC_POPUP", CLAUDE.md
 # "서비스 설계 원칙" 참고). 기본값은 오늘.
 todayIso=$(date +%F)
-chosenIso=$("$HACKMAC_POPUP" date --title "업무 공유하기" --prompt "공유할 날짜를 선택하세요" --ok "선택" --cancel "취소" --default "$todayIso")
+chosenIso=$("$HACKMAC_POPUP" date --title "업무 공유하기" --prompt "공유할 날짜를 선택하세요" --ok "선택" --cancel "취소" --default "$todayIso" -- "${markedDates[@]}")
 if [[ $? -ne 0 || -z "$chosenIso" ]]; then
   exit 0
 fi
@@ -19,7 +55,7 @@ chosenDay="${rest##*-}"
 isToday=0
 [[ "$chosenIso" == "$todayIso" ]] && isToday=1
 
-# 2. 선택한 날짜의 완료 내역(오늘이면 진행중·대기까지)을 조회해 클립보드에
+# 3. 선택한 날짜의 완료 내역(오늘이면 진행중·대기까지)을 조회해 클립보드에
 # 담는다 — 값은 인자로 넘긴다("-" 없이 쓰면 "$1"을 파일 경로로 오인한다).
 osascript - "$chosenYear" "$chosenMonth" "$chosenDay" "$isToday" <<'APPLESCRIPT'
 -- Slack Incoming Webhook을 쓰고 싶으면 아래에 URL을 넣으세요. 비워두면

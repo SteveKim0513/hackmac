@@ -200,6 +200,7 @@ function DatePopup({ request, onResolve }: { request: Extract<PopupRequest, { ki
   }, [activeDate]);
 
   const cells = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
+  const markedSet = useMemo(() => new Set(request.markedDates), [request]);
   const activeISO = toISODate(activeDate);
   const todayISO = toISODate(new Date());
 
@@ -227,21 +228,22 @@ function DatePopup({ request, onResolve }: { request: Extract<PopupRequest, { ki
           ))}
         </div>
         <div className="popup-calendar-grid">
-          {cells.map((day, i) =>
-            day ? (
+          {cells.map((day, i) => {
+            if (!day) return <span key={i} className="popup-calendar-cell is-empty" />;
+            const iso = toISODate(day);
+            return (
               <button
                 key={i}
                 type="button"
-                className={`popup-calendar-cell ${toISODate(day) === activeISO ? 'is-active' : ''} ${toISODate(day) === todayISO ? 'is-today' : ''}`}
+                className={`popup-calendar-cell ${iso === activeISO ? 'is-active' : ''} ${iso === todayISO ? 'is-today' : ''}`}
                 onMouseEnter={() => setActiveDate(day)}
                 onClick={() => choose(day)}
               >
                 {day.getDate()}
+                {markedSet.has(iso) && <span className="popup-calendar-dot" />}
               </button>
-            ) : (
-              <span key={i} className="popup-calendar-cell is-empty" />
-            ),
-          )}
+            );
+          })}
         </div>
       </div>
       <div className="popup-actions">

@@ -181,6 +181,26 @@ test('date: 다음 달로 넘긴 뒤 날짜를 클릭하면 그 달의 날짜로
   expect(result.stdout).toBe('2024-04-05');
 });
 
+test('date: 인자로 넘긴 날짜에만 점 표시가 붙는다', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'date', '--title', '업무 공유하기', '--prompt', '공유할 날짜를 선택하세요', '--ok', '선택', '--cancel', '취소', '--default', '2024-03-10',
+    '--', '2024-03-05', '2024-03-20',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+
+  const dayCell = (day: string) => popup.locator('.popup-calendar-grid button', { hasText: new RegExp(`^${day}$`) });
+  await expect(dayCell('5').locator('.popup-calendar-dot')).toHaveCount(1);
+  await expect(dayCell('20').locator('.popup-calendar-dot')).toHaveCount(1);
+  await expect(dayCell('10').locator('.popup-calendar-dot')).toHaveCount(0);
+  await expect(dayCell('15').locator('.popup-calendar-dot')).toHaveCount(0);
+
+  await popup.keyboard.down('Escape');
+  await cliPromise;
+});
+
 test('date: Esc를 누르면 취소로 처리된다 (종료 코드 1)', async () => {
   const { app, userData } = handle;
   const cliPromise = callPopupCli(userData, [
