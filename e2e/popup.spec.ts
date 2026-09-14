@@ -131,3 +131,66 @@ test('confirm: cancelLabel이 빈 문자열이면 취소 버튼이 아예 안 �
   const result = await cliPromise;
   expect(result.status).toBe(0);
 });
+
+test('date: 날짜를 하나 클릭하면 그 즉시 YYYY-MM-DD로 선택된다', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'date', '--title', '업무 공유하기', '--prompt', '공유할 날짜를 선택하세요', '--ok', '선택', '--cancel', '취소', '--default', '2024-03-10',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+  await expect(popup.locator('.popup-calendar-month')).toHaveText('2024년 3월');
+
+  await popup.locator('.popup-calendar-grid button', { hasText: /^15$/ }).click();
+
+  const result = await cliPromise;
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe('2024-03-15');
+});
+
+test('date: 클릭 없이 선택 버튼을 누르면 기본값(--default)이 그대로 선택된다', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'date', '--title', '업무 공유하기', '--prompt', '공유할 날짜를 선택하세요', '--ok', '선택', '--cancel', '취소', '--default', '2024-03-10',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+  await popup.click('.popup-btn.primary');
+
+  const result = await cliPromise;
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe('2024-03-10');
+});
+
+test('date: 다음 달로 넘긴 뒤 날짜를 클릭하면 그 달의 날짜로 선택된다', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'date', '--title', '업무 공유하기', '--prompt', '공유할 날짜를 선택하세요', '--ok', '선택', '--cancel', '취소', '--default', '2024-03-10',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+  await popup.click('.popup-calendar-navbtn[aria-label="다음 달"]');
+  await expect(popup.locator('.popup-calendar-month')).toHaveText('2024년 4월');
+  await popup.locator('.popup-calendar-grid button', { hasText: /^5$/ }).click();
+
+  const result = await cliPromise;
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe('2024-04-05');
+});
+
+test('date: Esc를 누르면 취소로 처리된다 (종료 코드 1)', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'date', '--title', '업무 공유하기', '--prompt', '공유할 날짜를 선택하세요', '--ok', '선택', '--cancel', '취소', '--default', '2024-03-10',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+  await popup.keyboard.down('Escape');
+
+  const result = await cliPromise;
+  expect(result.status).toBe(1);
+});

@@ -20,6 +20,7 @@ export function PopupApp() {
 
   if (request.kind === 'select') return <SelectPopup request={request} onResolve={window.hackmacPopup.resolve} />;
   if (request.kind === 'prompt') return <PromptPopup request={request} onResolve={window.hackmacPopup.resolve} />;
+  if (request.kind === 'date') return <DatePopup request={request} onResolve={window.hackmacPopup.resolve} />;
   return <ConfirmPopup request={request} onResolve={window.hackmacPopup.resolve} />;
 }
 
@@ -122,6 +123,132 @@ function PromptPopup({ request, onResolve }: { request: Extract<PopupRequest, { 
           {request.cancelLabel}
         </button>
         <button className="popup-btn primary" onClick={submit}>
+          {request.okLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const WEEKDAY_LABELS_KR = ['일', '월', '화', '수', '목', '금', '토'];
+
+function parseISODate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** 달력 그리드 한 칸(일요일 시작, 6주 고정) — 이전/다음 달로 넘어간 칸은
+ * null로 비워 이번 달 날짜만 보여준다. */
+function buildMonthGrid(monthStart: Date): (Date | null)[] {
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  while (cells.length < 42) cells.push(null);
+  return cells;
+}
+
+function DatePopup({ request, onResolve }: { request: Extract<PopupRequest, { kind: 'date' }>; onResolve: Resolver }) {
+  const initial = useMemo(() => (request.defaultValue ? parseISODate(request.defaultValue) : new Date()), [request]);
+  const [activeDate, setActiveDate] = useState(initial);
+  const [viewMonth, setViewMonth] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
+
+  const cancel = () => onResolve({ ok: false, value: null });
+  const choose = (d: Date) => onResolve({ ok: true, value: toISODate(d) });
+  const shiftMonth = (delta: number) => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+  const moveActive = (deltaDays: number) => {
+    setActiveDate((d) => {
+      const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + deltaDays);
+      setViewMonth((m) => (m.getFullYear() === next.getFullYear() && m.getMonth() === next.getMonth() ? m : new Date(next.getFullYear(), next.getMonth(), 1)));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        cancel();
+      } else if (e.key === 'Enter') {
+        choose(activeDate);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        moveActive(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        moveActive(1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveActive(-7);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveActive(7);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDate]);
+
+  const cells = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
+  const activeISO = toISODate(activeDate);
+  const todayISO = toISODate(new Date());
+
+  return (
+    <div className="popup-card">
+      <div className="popup-header">
+        <p className="popup-title">{request.title}</p>
+        <p className="popup-prompt">{request.prompt}</p>
+      </div>
+      <div className="popup-calendar">
+        <div className="popup-calendar-nav">
+          <button type="button" className="popup-calendar-navbtn" onClick={() => shiftMonth(-1)} aria-label="이전 달">
+            ‹
+          </button>
+          <span className="popup-calendar-month">
+            {viewMonth.getFullYear()}년 {viewMonth.getMonth() + 1}월
+          </span>
+          <button type="button" className="popup-calendar-navbtn" onClick={() => shiftMonth(1)} aria-label="다음 달">
+            ›
+          </button>
+        </div>
+        <div className="popup-calendar-weekdays">
+          {WEEKDAY_LABELS_KR.map((w) => (
+            <span key={w}>{w}</span>
+          ))}
+        </div>
+        <div className="popup-calendar-grid">
+          {cells.map((day, i) =>
+            day ? (
+              <button
+                key={i}
+                type="button"
+                className={`popup-calendar-cell ${toISODate(day) === activeISO ? 'is-active' : ''} ${toISODate(day) === todayISO ? 'is-today' : ''}`}
+                onMouseEnter={() => setActiveDate(day)}
+                onClick={() => choose(day)}
+              >
+                {day.getDate()}
+              </button>
+            ) : (
+              <span key={i} className="popup-calendar-cell is-empty" />
+            ),
+          )}
+        </div>
+      </div>
+      <div className="popup-actions">
+        <button className="popup-btn" onClick={cancel}>
+          {request.cancelLabel}
+        </button>
+        <button className="popup-btn primary" onClick={() => choose(activeDate)}>
           {request.okLabel}
         </button>
       </div>

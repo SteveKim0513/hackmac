@@ -7,6 +7,7 @@
 #   "$HACKMAC_POPUP" select  --title T --prompt P --ok O --cancel C [--default D] -- item1 item2 ...
 #   "$HACKMAC_POPUP" prompt  --title T --prompt P --ok O --cancel C [--default D]
 #   "$HACKMAC_POPUP" confirm --title T --prompt P --ok O --cancel C
+#   "$HACKMAC_POPUP" date    --title T --prompt P --ok O --cancel C [--default YYYY-MM-DD]
 #
 # 표준출력으로 선택/입력값을 돌려주고, 취소되면(사용자가 취소 버튼을 누르거나
 # Esc를 누르면) 종료 코드 1을 반환한다 — 호출부에서 `$?`로 분기한다.

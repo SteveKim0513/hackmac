@@ -65,11 +65,15 @@ export type UpdateCheckResult =
  * these render in replaces `display dialog`/`choose from list` (see
  * docs/design.md). `select` covers `choose from list`, `prompt` covers
  * `display dialog ... default answer`, `confirm` covers a plain
- * `display dialog` with only buttons. */
+ * `display dialog` with only buttons, `date` covers picking a calendar
+ * date (there is no osascript equivalent this replaces — AppleScript has
+ * no built-in date-picker dialog). `date`'s `defaultValue`/result value is
+ * always a `YYYY-MM-DD` string in the local timezone. */
 export type PopupRequest =
   | { kind: 'select'; title: string; prompt: string; okLabel: string; cancelLabel: string; items: string[]; defaultItem: string | null }
   | { kind: 'prompt'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string }
-  | { kind: 'confirm'; title: string; prompt: string; okLabel: string; cancelLabel: string };
+  | { kind: 'confirm'; title: string; prompt: string; okLabel: string; cancelLabel: string }
+  | { kind: 'date'; title: string; prompt: string; okLabel: string; cancelLabel: string; defaultValue: string };
 
 /** `ok: false` means the user cancelled (Escape, cancel button, or closed
  * the window) — same meaning as AppleScript's user-cancelled error -128. */

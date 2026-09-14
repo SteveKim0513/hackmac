@@ -1,6 +1,6 @@
 #!/bin/zsh
 # @svc-name: 업무 현황보기
-# @svc-hotkey: Alt+4
+# @svc-hotkey: Alt+9
 # @svc-description: 지금 뭐가 얼마나 밀렸는지 궁금할 때 누르세요. 대기·진행중·오늘 완료 개수는 물론, 진행중인 일마다 이름과 경과 시간까지 보여줘요.
 
 # 순수 조회 + 요약 문자열 조립까지는 osascript가 담당하고, 화면에 보여주는

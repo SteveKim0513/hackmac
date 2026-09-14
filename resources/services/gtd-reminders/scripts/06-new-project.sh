@@ -1,6 +1,6 @@
 #!/bin/zsh
 # @svc-name: 프로젝트 등록
-# @svc-hotkey: Alt+6
+# @svc-hotkey: Alt+\
 # @svc-description: 새 프로젝트가 생기면 누르세요. 이름만 입력하면 미리알림 리스트가 만들어지고, 다음 '업무 등록'부터 바로 선택할 수 있어요.
 
 # 1. 프로젝트 이름 입력.

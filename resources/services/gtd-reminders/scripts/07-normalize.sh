@@ -1,6 +1,6 @@
 #!/bin/zsh
 # @svc-name: 업무 구조 정규화
-# @svc-hotkey: Alt+0
+# @svc-hotkey: Control+Alt+0
 # @svc-description: 미리알림에 이미 다른 목록·할 일이 있을 수 있는 첫 사용 시점에 누르세요. 그대로 두고 GTD 구조만 더할지, 전부 지우고 GTD만 남길지 고를 수 있어요. (폴더로 묶어둔 목록도 안까지 다 지워지지만, 다 지운 뒤 빈 폴더 껍데기 자체는 애플이 API를 안 열어둬서 미리알림 앱에서 직접 지워야 해요.)
 
 osascript -l JavaScript <<'JXA'

@@ -104,6 +104,91 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-default) 15%, transparent);
 }
 
+.popup-calendar {
+  flex: 1;
+  padding: 4px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popup-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.popup-calendar-month {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.popup-calendar-navbtn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 80ms var(--ease);
+}
+
+.popup-calendar-navbtn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.popup-calendar-weekdays,
+.popup-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.popup-calendar-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  padding-bottom: 2px;
+}
+
+.popup-calendar-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 80ms var(--ease);
+}
+
+.popup-calendar-cell.is-empty {
+  cursor: default;
+}
+
+.popup-calendar-cell:not(.is-empty):hover {
+  background: var(--surface-hover);
+}
+
+.popup-calendar-cell.is-today {
+  color: var(--accent-default);
+  font-weight: 600;
+}
+
+.popup-calendar-cell.is-active {
+  background: var(--accent-default);
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .popup-body {
   flex: 1;
   overflow-y: auto;

@@ -17,8 +17,8 @@ function fail(message) {
 
 function parseArgs(argv) {
   const kind = argv[0];
-  if (kind !== 'select' && kind !== 'prompt' && kind !== 'confirm') {
-    fail(`알 수 없는 모드: ${kind ?? '(없음)'} (select/prompt/confirm 중 하나)`);
+  if (kind !== 'select' && kind !== 'prompt' && kind !== 'confirm' && kind !== 'date') {
+    fail(`알 수 없는 모드: ${kind ?? '(없음)'} (select/prompt/confirm/date 중 하나)`);
   }
 
   const flags = { title: '', prompt: '', ok: '', cancel: '', default: '' };
@@ -47,7 +47,7 @@ function parseArgs(argv) {
       defaultItem: flags.default || null,
     };
   }
-  if (kind === 'prompt') {
+  if (kind === 'prompt' || kind === 'date') {
     return {
       kind,
       title: flags.title,

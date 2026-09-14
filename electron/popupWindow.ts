@@ -19,6 +19,7 @@ const E2E_QUIET = process.env.HACKMAC_E2E_QUIET === '1' && !process.env.CI;
 
 function computeHeight(req: PopupRequest): number {
   if (req.kind === 'prompt') return 188;
+  if (req.kind === 'date') return 404;
   if (req.kind === 'select') {
     const rows = Math.max(1, Math.min(req.items.length, MAX_VISIBLE_ROWS));
     return 168 + rows * ROW_HEIGHT;

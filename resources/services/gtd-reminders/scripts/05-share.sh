@@ -1,9 +1,27 @@
 #!/bin/zsh
 # @svc-name: 업무 공유하기
-# @svc-hotkey: Alt+5
-# @svc-description: 하루를 정리하며 팀에 남길 때 누르세요. 오늘 완료·진행중·대기 현황을 소요시간과 함께 클립보드에 복사해요. 채널에 붙여넣기(⌘V)만 하면 끝이에요.
+# @svc-hotkey: Alt+0
+# @svc-description: 하루를 정리하며 팀에 남길 때 누르세요. 달력에서 날짜를 고르면 그 날짜에 완료한 업무 내역이 클립보드에 복사돼요(오늘을 고르면 진행중·대기 현황까지 함께 담겨요). 채널에 붙여넣기(⌘V)만 하면 끝이에요.
 
-osascript <<'APPLESCRIPT'
+# 1. 공유할 날짜 선택 — 팝업은 HackMac 앱이 그린다("$HACKMAC_POPUP", CLAUDE.md
+# "서비스 설계 원칙" 참고). 기본값은 오늘.
+todayIso=$(date +%F)
+chosenIso=$("$HACKMAC_POPUP" date --title "업무 공유하기" --prompt "공유할 날짜를 선택하세요" --ok "선택" --cancel "취소" --default "$todayIso")
+if [[ $? -ne 0 || -z "$chosenIso" ]]; then
+  exit 0
+fi
+echo "선택한 날짜: $chosenIso (오늘: $todayIso)"
+
+chosenYear="${chosenIso%%-*}"
+rest="${chosenIso#*-}"
+chosenMonth="${rest%%-*}"
+chosenDay="${rest##*-}"
+isToday=0
+[[ "$chosenIso" == "$todayIso" ]] && isToday=1
+
+# 2. 선택한 날짜의 완료 내역(오늘이면 진행중·대기까지)을 조회해 클립보드에
+# 담는다 — 값은 인자로 넘긴다("-" 없이 쓰면 "$1"을 파일 경로로 오인한다).
+osascript - "$chosenYear" "$chosenMonth" "$chosenDay" "$isToday" <<'APPLESCRIPT'
 -- Slack Incoming Webhook을 쓰고 싶으면 아래에 URL을 넣으세요. 비워두면
 -- 클립보드 복사만 하고 끝난다.
 property slackWebhookURL : ""
@@ -34,91 +52,114 @@ on jsonEscapedString(txt)
   return "\"" & out & "\""
 end jsonEscapedString
 
-on todayLabel()
-  set d to current date
+on dowLabel(d)
   set wd to weekday of d
   if wd is Sunday then
-    set dowKr to "일"
+    return "일"
   else if wd is Monday then
-    set dowKr to "월"
+    return "월"
   else if wd is Tuesday then
-    set dowKr to "화"
+    return "화"
   else if wd is Wednesday then
-    set dowKr to "수"
+    return "수"
   else if wd is Thursday then
-    set dowKr to "목"
+    return "목"
   else if wd is Friday then
-    set dowKr to "금"
+    return "금"
   else
-    set dowKr to "토"
+    return "토"
   end if
-  return ((month of d as integer) as string) & "/" & ((day of d) as string) & "(" & dowKr & ")"
-end todayLabel
+end dowLabel
 
-try
-  set todayStart to (current date) - (time of (current date))
-  set doneLines to {}
-  set ongoingLines to {}
-  set waitingLines to {}
+on dateLabel(d)
+  return ((month of d as integer) as string) & "/" & ((day of d) as string) & "(" & (my dowLabel(d)) & ")"
+end dateLabel
 
-  tell application "Reminders"
-    repeat with l in lists
-      if (name of l) starts with "GTD " then
-        set nms to name of every reminder of l
-        set cds to completed of every reminder of l
-        set dds to due date of every reminder of l
-        set eds to completion date of every reminder of l
-        repeat with i from 1 to (count of nms)
-          set nm to item i of nms
-          if (item i of cds) is true then
-            set ed to item i of eds
-            if ed is not missing value and ed ≥ todayStart then
+on run argv
+  set y to (item 1 of argv) as integer
+  set m to (item 2 of argv) as integer
+  set d to (item 3 of argv) as integer
+  set isToday to (item 4 of argv) is "1"
+
+  try
+    -- day를 1로 먼저 낮춰두지 않으면(오늘이 31일인데 month만 먼저 바꾸는
+    -- 경우 등) 일부 달에서 day 오버플로로 다음 달로 밀릴 수 있다.
+    set dayStart to current date
+    set time of dayStart to 0
+    set day of dayStart to 1
+    set year of dayStart to y
+    set month of dayStart to m
+    set day of dayStart to d
+    set dayEnd to dayStart + 1 * days
+
+    set doneLines to {}
+    set ongoingLines to {}
+    set waitingLines to {}
+
+    tell application "Reminders"
+      repeat with l in lists
+        if (name of l) starts with "GTD " then
+          set nms to name of every reminder of l
+          set cds to completed of every reminder of l
+          set dds to due date of every reminder of l
+          set eds to completion date of every reminder of l
+          repeat with i from 1 to (count of nms)
+            set nm to item i of nms
+            if (item i of cds) is true then
+              set ed to item i of eds
+              if ed is not missing value and ed ≥ dayStart and ed < dayEnd then
+                set sd to item i of dds
+                if sd is missing value then
+                  set dsec to 0
+                else
+                  set dsec to ed - sd
+                end if
+                set end of doneLines to ("- " & nm & " (" & my fmtDur(dsec) & ")")
+              end if
+            else if isToday then
               set sd to item i of dds
               if sd is missing value then
-                set dsec to 0
+                set end of waitingLines to ("- " & nm)
               else
-                set dsec to ed - sd
+                set dsec to (current date) - sd
+                set end of ongoingLines to ("- " & nm & " (" & my fmtDur(dsec) & "째)")
               end if
-              set end of doneLines to ("- " & nm & " (" & my fmtDur(dsec) & ")")
             end if
-          else
-            set sd to item i of dds
-            if sd is missing value then
-              set end of waitingLines to ("- " & nm)
-            else
-              set dsec to (current date) - sd
-              set end of ongoingLines to ("- " & nm & " (" & my fmtDur(dsec) & "째)")
-            end if
-          end if
-        end repeat
-      end if
-    end repeat
-  end tell
+          end repeat
+        end if
+      end repeat
+    end tell
 
-  set AppleScript's text item delimiters to linefeed
-  set doneText to doneLines as string
-  set ongoingText to ongoingLines as string
-  set waitingText to waitingLines as string
-  set AppleScript's text item delimiters to ""
+    set AppleScript's text item delimiters to linefeed
+    set doneText to doneLines as string
+    set ongoingText to ongoingLines as string
+    set waitingText to waitingLines as string
+    set AppleScript's text item delimiters to ""
 
-  set report to "📅 " & (my todayLabel()) & " 진행 현황" & linefeed & ¬
-    "✅ 완료 " & (count of doneLines) & linefeed & doneText & linefeed & ¬
-    "🌀 진행중 " & (count of ongoingLines) & linefeed & ongoingText & linefeed & ¬
-    "🗂 대기 " & (count of waitingLines) & linefeed & waitingText
+    if isToday then
+      set report to "📅 " & (my dateLabel(dayStart)) & " 진행 현황" & linefeed & ¬
+        "✅ 완료 " & (count of doneLines) & linefeed & doneText & linefeed & ¬
+        "🌀 진행중 " & (count of ongoingLines) & linefeed & ongoingText & linefeed & ¬
+        "🗂 대기 " & (count of waitingLines) & linefeed & waitingText
+    else
+      set report to "📅 " & (my dateLabel(dayStart)) & " 업무 내역" & linefeed & ¬
+        "✅ 완료 " & (count of doneLines) & linefeed & doneText
+    end if
 
-  set the clipboard to report
+    set the clipboard to report
 
-  if slackWebhookURL is not "" then
-    set payload to "{\"text\":" & (my jsonEscapedString(report)) & "}"
-    do shell script "curl -s -X POST -H " & (quoted form of "Content-Type: application/json") & " -d " & (quoted form of payload) & " " & (quoted form of slackWebhookURL)
-    display notification "오늘 진행 현황을 클립보드에 복사하고 Slack에도 올렸어요" with title "📤 공유했어요"
-  else
-    display notification "오늘 진행 현황을 클립보드에 복사했어요 — 팀 채널에 붙여넣기(⌘V)만 하면 돼요" with title "📤 공유했어요"
-  end if
-on error errText number errNum
-  if errNum is not -128 then
-    log errText
-    display notification errText with title "⚠️ 업무 공유 실패"
-  end if
-end try
+    if slackWebhookURL is not "" then
+      set payload to "{\"text\":" & (my jsonEscapedString(report)) & "}"
+      do shell script "curl -s -X POST -H " & (quoted form of "Content-Type: application/json") & " -d " & (quoted form of payload) & " " & (quoted form of slackWebhookURL)
+      display notification "선택한 날짜의 업무 내역을 클립보드에 복사하고 Slack에도 올렸어요" with title "📤 공유했어요"
+    else
+      display notification "선택한 날짜의 업무 내역을 클립보드에 복사했어요 — 팀 채널에 붙여넣기(⌘V)만 하면 돼요" with title "📤 공유했어요"
+    end if
+  on error errText number errNum
+    if errNum is not -128 then
+      log errText
+      display notification errText with title "⚠️ 업무 공유 실패"
+    end if
+  end try
+end run
 APPLESCRIPT
