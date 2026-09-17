@@ -55,12 +55,17 @@ if [[ $? -ne 0 ]]; then
   exit 0
 fi
 
-# 3. 완료 처리 — 값은 인자로 넘긴다.
+# 3. 완료 처리 — 값은 인자로 넘긴다. 등록 시(01-register.sh) notes(body)에
+# "target=<분>"이 있으면, 실제 소요시간과 비교해 달성률을 계산하고 같은
+# 필드에 "actual="/"achievement=" 줄을 이어 붙인다 — 05-share.sh가 이 값을
+# 읽어 공유 내역에 함께 보여준다.
 osascript - "$chosenName" <<'APPLESCRIPT'
 on run argv
   set chosenName to item 1 of argv
   try
     set diffSec to 0
+    set targetMinutes to missing value
+    set achievementPercent to missing value
     tell application "Reminders"
       repeat with l in lists
         if (name of l) starts with "GTD " then
@@ -70,6 +75,23 @@ on run argv
             set startD to due date of r
             set completed of r to true
             set diffSec to (completion date of r) - startD
+
+            set theBody to body of r
+            if theBody is missing value then set theBody to ""
+            repeat with ln in paragraphs of theBody
+              if ln starts with "target=" then
+                try
+                  set targetMinutes to (text 8 thru -1 of ln) as integer
+                end try
+              end if
+            end repeat
+
+            if targetMinutes is not missing value and targetMinutes > 0 then
+              set actualMinutes to round (diffSec / 60)
+              set achievementPercent to round ((actualMinutes / targetMinutes) * 100)
+              set body of r to (theBody & linefeed & "actual=" & actualMinutes & linefeed & "achievement=" & achievementPercent & "%")
+            end if
+
             exit repeat
           end if
         end if
@@ -83,6 +105,10 @@ on run argv
       set dur to (h as string) & "시간 " & (m as string) & "분"
     else
       set dur to (m as string) & "분"
+    end if
+
+    if achievementPercent is not missing value then
+      set dur to dur & " · 목표 " & targetMinutes & "분 대비 " & achievementPercent & "%"
     end if
 
     display notification (chosenName & " (" & dur & ")") with title "✅ 완료했어요"

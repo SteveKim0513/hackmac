@@ -20,6 +20,7 @@ try
         set cds to completed of every reminder of l
         set dds to due date of every reminder of l
         set eds to completion date of every reminder of l
+        set bds to body of every reminder of l
         repeat with i from 1 to (count of nms)
           if (item i of cds) is false then
             if (item i of dds) is missing value then
@@ -34,6 +35,23 @@ try
               else
                 set dur to (m as string) & "분째"
               end if
+
+              -- notes(body)에 "target=<분>"이 있으면 목표 시간도 같이 보여준다
+              -- (01-register.sh가 등록 시 심어둔다).
+              set theBody to item i of bds
+              if theBody is missing value then set theBody to ""
+              set targetMinutes to missing value
+              repeat with ln in paragraphs of theBody
+                if ln starts with "target=" then
+                  try
+                    set targetMinutes to (text 8 thru -1 of ln) as integer
+                  end try
+                end if
+              end repeat
+              if targetMinutes is not missing value then
+                set dur to dur & " · 목표 " & targetMinutes & "분"
+              end if
+
               set end of detailLines to ("· " & (item i of nms) & " (" & dur & ")")
             end if
           else

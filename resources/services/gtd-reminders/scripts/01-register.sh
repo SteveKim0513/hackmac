@@ -43,19 +43,41 @@ if (( ${#projectNames[@]} > 1 )); then
   fi
 fi
 
-# 4. 실제 등록 — 값은 인자로 넘긴다(`osascript - "$1" ... <<'EOF'`처럼 `-`를
-# 붙여야 인자가 stdin 스크립트 대신 파일 경로로 오인되지 않는다).
-osascript - "$theTitle" "$targetList" <<'APPLESCRIPT'
+# 4. 목표 시간 선택 — 10분 단위 프리셋 중 고르거나 건너뛴다(취소 = 목표 없음).
+# 자유 입력 대신 select로 고정한 이유: "10분 단위"라는 제약을 프롬프트 검증
+# 없이 그 자체로 보장하기 위해서다.
+targetOptions=(10분 20분 30분 40분 50분 60분 90분 120분 180분 240분)
+targetLabel=$("$HACKMAC_POPUP" select --title "업무 등록" --prompt "목표 시간을 정할까요?" --ok "설정" --cancel "건너뛰기(목표 없음)" -- "${targetOptions[@]}")
+targetMinutes=""
+if [[ $? -eq 0 && -n "$targetLabel" ]]; then
+  targetMinutes="${targetLabel%분}"
+fi
+echo "목표 시간: ${targetMinutes:-없음}"
+
+# 5. 실제 등록 — 값은 인자로 넘긴다(`osascript - "$1" ... <<'EOF'`처럼 `-`를
+# 붙여야 인자가 stdin 스크립트 대신 파일 경로로 오인되지 않는다). 목표 시간은
+# notes(AppleScript에서는 body) 필드에 "target=<분>" 한 줄로 남겨둔다 — 완료
+# 처리(03-complete.sh)가 이 값을 읽어 실제 소요시간과 비교한다.
+osascript - "$theTitle" "$targetList" "$targetMinutes" <<'APPLESCRIPT'
 on run argv
   set theTitle to item 1 of argv
   set targetList to item 2 of argv
+  set targetMinutes to item 3 of argv
   try
     tell application "Reminders"
       tell list targetList
-        make new reminder with properties {name:theTitle}
+        if targetMinutes is "" then
+          make new reminder with properties {name:theTitle}
+        else
+          make new reminder with properties {name:theTitle, body:"target=" & targetMinutes}
+        end if
       end tell
     end tell
-    log "리마인더 생성 완료"
+    if targetMinutes is "" then
+      log "리마인더 생성 완료 (목표 없음)"
+    else
+      log "리마인더 생성 완료 (목표 " & targetMinutes & "분)"
+    end if
     display notification theTitle with title ("📥 등록했어요 · " & targetList)
   on error errText number errNum
     if errNum is not -128 then

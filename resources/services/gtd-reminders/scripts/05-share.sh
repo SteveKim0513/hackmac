@@ -139,6 +139,7 @@ on run argv
           set cds to completed of every reminder of l
           set dds to due date of every reminder of l
           set eds to completion date of every reminder of l
+          set bds to body of every reminder of l
           repeat with i from 1 to (count of nms)
             set nm to item i of nms
             if (item i of cds) is true then
@@ -150,7 +151,29 @@ on run argv
                 else
                   set dsec to ed - sd
                 end if
-                set end of doneLines to ("- " & nm & " (" & my fmtDur(dsec) & ")")
+
+                -- 03-complete.sh가 완료 시 남겨둔 "target="/"achievement="
+                -- 줄이 있으면 목표 대비 달성률도 같이 보여준다.
+                set theBody to item i of bds
+                if theBody is missing value then set theBody to ""
+                set targetMinutes to missing value
+                set achievementPercent to missing value
+                repeat with ln in paragraphs of theBody
+                  if ln starts with "target=" then
+                    try
+                      set targetMinutes to (text 8 thru -1 of ln) as integer
+                    end try
+                  else if ln starts with "achievement=" then
+                    set achievementPercent to (text 13 thru -1 of ln)
+                  end if
+                end repeat
+
+                set durText to my fmtDur(dsec)
+                if targetMinutes is not missing value and achievementPercent is not missing value then
+                  set durText to durText & " · 목표 " & targetMinutes & "분 대비 " & achievementPercent
+                end if
+
+                set end of doneLines to ("- " & nm & " (" & durText & ")")
               end if
             else if isToday then
               set sd to item i of dds
