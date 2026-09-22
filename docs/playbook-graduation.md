@@ -35,7 +35,7 @@ Playbook이 mac-shortcut-manager의 `~/Documents/ShortcutScripts` 폴더를 실�
 | `@msm-trigger`(schedule/login/wake/folder) | 지원 안 함 — 단축키 트리거만 이관 가능 |
 | (스토어 카피 없음, 매니저 UI가 곧 설명) | `manifest.json`의 `tagline`/`whatItIs`/`differentiators`/`strengths`/`usage` — 새로 써야 함 |
 
-여러 개의 관련 스크립트가 하나의 서비스로 묶일 수도 있다(예: `gtd-reminders`는 스크립트 5개가 하나의
+여러 개의 관련 스크립트가 하나의 서비스로 묶일 수도 있다(예: `gtd-reminders`는 스크립트 8개가 하나의
 서비스 스토리로 묶인 경우). 1:1 복사가 아니라 "이 스크립트들을 묶으면 하나의 서비스 스토리가 되는가"를
 판단하는 일이라는 걸 기억할 것.
 
