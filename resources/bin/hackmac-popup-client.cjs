@@ -37,13 +37,22 @@ function parseArgs(argv) {
   }
 
   if (kind === 'select') {
+    // 항목 하나가 "그룹\x1f라벨"이면(구간 헤더로 묶어 보여줄 그룹) 앞부분을
+    // group으로, 나머지를 label로 쪼갠다 — \x1f(ASCII Unit Separator)는 사람이
+    // 실수로 타이핑할 일이 없는 문자라 구분자로 쓴다. 그룹 표시 없이 쓰던
+    // 기존 호출부는 이 문자가 없으니 group: null로 그대로 동작한다.
+    const GROUP_SEP = '\x1f';
     return {
       kind,
       title: flags.title,
       prompt: flags.prompt,
       okLabel: flags.ok,
       cancelLabel: flags.cancel,
-      items,
+      items: items.map((raw) => {
+        const sepIndex = raw.indexOf(GROUP_SEP);
+        if (sepIndex === -1) return { label: raw, group: null };
+        return { group: raw.slice(0, sepIndex), label: raw.slice(sepIndex + 1) };
+      }),
       defaultItem: flags.default || null,
     };
   }

@@ -35,9 +35,21 @@ fi
 echo "프로젝트 목록 조회 완료: ${#projectNames[@]}개"
 
 # 3. 프로젝트가 여러 개일 때만 고르게 한다 — 취소(건너뛰기)하면 수집함 그대로.
+# 업무/개인 구간 헤더로 나눠 보여준다 — "GTD 개인 "으로 시작하는 리스트만
+# 개인, 나머지(수집함 포함)는 전부 업무.
 targetList="$INBOX"
 if (( ${#projectNames[@]} > 1 )); then
-  picked=$("$HACKMAC_POPUP" select --title "업무 등록" --prompt "어디에 등록할까요?" --ok "선택" --cancel "건너뛰기(수집함)" --default "$INBOX" -- "${projectNames[@]}")
+  workProjects=()
+  personalProjects=()
+  for n in "${projectNames[@]}"; do
+    if [[ "$n" == "GTD 개인 "* ]]; then
+      personalProjects+=("개인"$'\x1f'"$n")
+    else
+      workProjects+=("업무"$'\x1f'"$n")
+    fi
+  done
+  projectItems=("${workProjects[@]}" "${personalProjects[@]}")
+  picked=$("$HACKMAC_POPUP" select --title "업무 등록" --prompt "어디에 등록할까요?" --ok "선택" --cancel "건너뛰기(수집함)" --default "$INBOX" -- "${projectItems[@]}")
   if [[ $? -eq 0 && -n "$picked" ]]; then
     targetList="$picked"
   fi

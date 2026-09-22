@@ -8,18 +8,24 @@
 # 처리 시점에 완료 시각 - 이 값으로 소요시간을 계산). 순수 조회라 osascript를
 # 그대로 쓴다.
 queryOut=$(osascript <<'APPLESCRIPT'
-set waitingNames to {}
+set waitingEntries to {}
 set ongoingCount to 0
+set RS to (ASCII character 31)
 tell application "Reminders"
   repeat with l in lists
     if (name of l) starts with "GTD " then
+      if (name of l) starts with "GTD 개인 " then
+        set cat to "개인"
+      else
+        set cat to "업무"
+      end if
       set nms to name of every reminder of l
       set cds to completed of every reminder of l
       set dds to due date of every reminder of l
       repeat with i from 1 to (count of nms)
         if (item i of cds) is false then
           if (item i of dds) is missing value then
-            set end of waitingNames to (item i of nms)
+            set end of waitingEntries to (cat & RS & (item i of nms))
           else
             set ongoingCount to ongoingCount + 1
           end if
@@ -29,19 +35,31 @@ tell application "Reminders"
   end repeat
 end tell
 set AppleScript's text item delimiters to linefeed
-return (ongoingCount as text) & linefeed & (waitingNames as text)
+return (ongoingCount as text) & linefeed & (waitingEntries as text)
 APPLESCRIPT
 )
 ongoingCount=$(echo "$queryOut" | head -n1)
-waitingNamesRaw=$(echo "$queryOut" | tail -n +2)
-if [[ -n "$waitingNamesRaw" ]]; then
-  waitingNames=("${(@f)waitingNamesRaw}")
+waitingEntriesRaw=$(echo "$queryOut" | tail -n +2)
+if [[ -n "$waitingEntriesRaw" ]]; then
+  waitingEntriesRaw=("${(@f)waitingEntriesRaw}")
 else
-  waitingNames=()
+  waitingEntriesRaw=()
 fi
-echo "Reminders 조회 완료: 대기 ${#waitingNames[@]}개, 진행중 ${ongoingCount}개"
+# 업무를 먼저, 개인을 뒤에 두어 구간 헤더가 서로 섞이지 않고 이어붙게 한다
+# (Reminders lists 순회 순서는 카테고리와 무관하다).
+waitingItems=()
+personalWaitingItems=()
+for entry in "${waitingEntriesRaw[@]}"; do
+  if [[ "$entry" == 개인$'\x1f'* ]]; then
+    personalWaitingItems+=("$entry")
+  else
+    waitingItems+=("$entry")
+  fi
+done
+waitingItems+=("${personalWaitingItems[@]}")
+echo "Reminders 조회 완료: 대기 ${#waitingItems[@]}개, 진행중 ${ongoingCount}개"
 
-if (( ${#waitingNames[@]} == 0 )); then
+if (( ${#waitingItems[@]} == 0 )); then
   osascript -e 'display notification "아직 등록한 일이 없어요 — 업무 등록으로 먼저 담아보세요" with title "📋 시작할 일 없음"'
   exit 0
 fi
@@ -55,7 +73,7 @@ if (( ongoingCount >= 3 )); then
 fi
 
 # 3. 시작할 일 고르기.
-chosenName=$("$HACKMAC_POPUP" select --title "업무 시작" --prompt "무엇을 시작할까요?" --ok "시작" --cancel "취소" -- "${waitingNames[@]}")
+chosenName=$("$HACKMAC_POPUP" select --title "업무 시작" --prompt "무엇을 시작할까요?" --ok "시작" --cancel "취소" -- "${waitingItems[@]}")
 if [[ $? -ne 0 ]]; then
   exit 0
 fi

@@ -5,6 +5,9 @@
 #
 # 사용법:
 #   "$HACKMAC_POPUP" select  --title T --prompt P --ok O --cancel C [--default D] -- item1 item2 ...
+#     (item을 "그룹"$'\x1f'"라벨" 형태로 넘기면 같은 그룹끼리 구간 헤더로
+#     묶여 보인다 — 예: "업무"$'\x1f'"할일1". \x1f 없이 넘기면 기존처럼 민짜
+#     라벨로 취급된다. 선택/기본값 비교와 돌려주는 값은 항상 라벨 쪽이다.)
 #   "$HACKMAC_POPUP" prompt  --title T --prompt P --ok O --cancel C [--default D]
 #   "$HACKMAC_POPUP" confirm --title T --prompt P --ok O --cancel C
 #   "$HACKMAC_POPUP" date    --title T --prompt P --ok O --cancel C [--default YYYY-MM-DD] [-- YYYY-MM-DD ...]

@@ -5,7 +5,15 @@ import { cleanupOldLogs, startExecLog, zshVersion } from './exec-log';
 import { popupClientJsPath, popupSocketPath, popupWrapperPath } from './paths';
 import type { RunResult } from '../shared/types';
 
-const TIMEOUT_MS = 30_000;
+// 팝업(prompt/select/confirm)으로 사람 입력을 기다리는 스크립트는 그 응답
+// 시간이 그대로 전체 실행 시간에 들어간다 — 제목 입력 + 프로젝트 선택처럼
+// 팝업이 두 번만 연속으로 떠도 사람이 잠깐 생각하는 것만으로 30초를 넘긴다.
+// 실제로 이 값이 30초였을 때 그런 정상적인 사용 흐름이 SIGTERM으로 조용히
+// 죽어(로그에 원인 없이 "성공=false 코드=없음"만 남음) 사용자가 "안 눌렸나"
+// 하고 단축키를 다시 눌러 같은 서비스가 중복 실행되는 문제로 이어졌다.
+// 5분은 진짜로 멈춘(응답 없는) 스크립트를 잡아내는 안전장치 역할은
+// 유지하면서, 정상적인 인터랙티브 흐름은 절대 여기 걸리지 않을 만큼 넉넉하다.
+const TIMEOUT_MS = 300_000;
 const OUTPUT_CAP = 4000;
 
 /** Buffers partial chunks and emits complete lines — stdout/stderr data

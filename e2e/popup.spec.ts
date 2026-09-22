@@ -71,6 +71,34 @@ test('select: 방향키 + Enter로도 고를 수 있다', async () => {
   expect(result.stdout).toBe('항목3');
 });
 
+test('select: "그룹"+\\x1f 접두 항목은 구간 헤더로 묶이고, 돌아오는 값에는 그룹이 안 섞인다', async () => {
+  const { app, userData } = handle;
+  const cliPromise = callPopupCli(userData, [
+    'select', '--title', '업무 등록', '--prompt', '어디에 등록할까요?', '--ok', '선택', '--cancel', '취소',
+    '--',
+    '업무\x1f프로젝트 A',
+    '업무\x1f프로젝트 B',
+    '개인\x1f운동 계획',
+  ]);
+
+  const popup = await app.waitForEvent('window');
+  await popup.waitForSelector('.popup-card');
+  // 그룹이 바뀔 때만 헤더가 하나씩 생긴다 — 업무 2개는 헤더 하나를 공유.
+  await expect(popup.locator('.popup-group-header')).toHaveCount(2);
+  await expect(popup.locator('.popup-group-header').nth(0)).toHaveText('업무');
+  await expect(popup.locator('.popup-group-header').nth(1)).toHaveText('개인');
+  await expect(popup.locator('.popup-row')).toHaveCount(3);
+  // 행에는 그룹 접두어 없이 라벨만 보인다.
+  await expect(popup.locator('.popup-row').nth(2)).toHaveText('운동 계획');
+
+  await popup.click('.popup-row >> text=운동 계획');
+
+  const result = await cliPromise;
+  expect(result.status).toBe(0);
+  // 돌아오는 값도 라벨만 — 그룹("개인")이나 구분자(\x1f)가 섞이지 않는다.
+  expect(result.stdout).toBe('운동 계획');
+});
+
 test('select: Esc를 누르면 취소로 처리된다 (종료 코드 1)', async () => {
   const { app, userData } = handle;
   const cliPromise = callPopupCli(userData, [

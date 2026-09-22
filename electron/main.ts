@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, powerSaveBlocker, shell, Tray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -169,6 +169,15 @@ app.whenReady().then(() => {
   if (app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: true });
   }
+
+  // Dock 아이콘도 없고(LSUIElement) 눈에 보이는 창도 없이 오래 떠있는
+  // 백그라운드 유틸리티라, macOS가 App Nap으로 메인 프로세스 자체를
+  // 스로틀링한다 — 그 상태에서 전역 단축키를 누르면 spawn/팝업 창 생성이
+  // 몇 초씩 늦게 반응하는데(사용자 리포트: "한참 있다가 나와서 여러 번
+  // 누르게 됨"), 어떤 즉각적 피드백도 없어 오류로 오인하기 쉽다.
+  // prevent-app-suspension으로 앱 전체 생명주기 동안 App Nap을 꺼서 유휴
+  // 시간이 길어도 단축키 반응 속도가 떨어지지 않게 한다.
+  powerSaveBlocker.start('prevent-app-suspension');
 
   serviceCatalog.init();
   startPopupServer();

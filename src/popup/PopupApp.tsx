@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { PopupRequest, PopupResult } from '../../shared/types';
 import './popup.css';
 
@@ -21,6 +21,7 @@ export function PopupApp() {
   if (request.kind === 'select') return <SelectPopup request={request} onResolve={window.hackmacPopup.resolve} />;
   if (request.kind === 'prompt') return <PromptPopup request={request} onResolve={window.hackmacPopup.resolve} />;
   if (request.kind === 'date') return <DatePopup request={request} onResolve={window.hackmacPopup.resolve} />;
+  if (request.kind === 'status') return <StatusPopup request={request} />;
   return <ConfirmPopup request={request} onResolve={window.hackmacPopup.resolve} />;
 }
 
@@ -28,14 +29,14 @@ type Resolver = (result: PopupResult) => void;
 
 function SelectPopup({ request, onResolve }: { request: Extract<PopupRequest, { kind: 'select' }>; onResolve: Resolver }) {
   const defaultIndex = useMemo(() => {
-    const i = request.defaultItem ? request.items.indexOf(request.defaultItem) : -1;
+    const i = request.defaultItem ? request.items.findIndex((item) => item.label === request.defaultItem) : -1;
     return i >= 0 ? i : 0;
   }, [request]);
   const [activeIndex, setActiveIndex] = useState(defaultIndex);
   const cancel = () => onResolve({ ok: false, value: null });
   const choose = (i: number) => {
     if (request.items.length === 0) return;
-    onResolve({ ok: true, value: request.items[i] });
+    onResolve({ ok: true, value: request.items[i].label });
   };
 
   useEffect(() => {
@@ -67,16 +68,21 @@ function SelectPopup({ request, onResolve }: { request: Extract<PopupRequest, { 
         <div className="popup-empty">고를 항목이 없어요</div>
       ) : (
         <ul className="popup-list">
-          {request.items.map((item, i) => (
-            <li
-              key={`${item}-${i}`}
-              className={`popup-row ${i === activeIndex ? 'is-active' : ''}`}
-              onMouseEnter={() => setActiveIndex(i)}
-              onClick={() => choose(i)}
-            >
-              {item}
-            </li>
-          ))}
+          {request.items.map((item, i, items) => {
+            const showHeader = item.group && item.group !== items[i - 1]?.group;
+            return (
+              <Fragment key={`${item.label}-${i}`}>
+                {showHeader && <li className="popup-group-header">{item.group}</li>}
+                <li
+                  className={`popup-row ${i === activeIndex ? 'is-active' : ''}`}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={() => choose(i)}
+                >
+                  {item.label}
+                </li>
+              </Fragment>
+            );
+          })}
         </ul>
       )}
       <div className="popup-actions">
@@ -254,6 +260,20 @@ function DatePopup({ request, onResolve }: { request: Extract<PopupRequest, { ki
           {request.okLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** electron/services.ts가 단축키 콜백에서 스크립트를 spawn하기 직전에
+ * 직접 띄우는 "지금 실행 중" 표시 — 사용자가 답할 버튼도 취소도 없고,
+ * electron/popupWindow.ts의 showRunningStatus/hideRunningStatus가 창
+ * 자체를 프로그램적으로 열고 닫으므로 여기선 onResolve를 아예 호출하지
+ * 않는다. */
+function StatusPopup({ request }: { request: Extract<PopupRequest, { kind: 'status' }> }) {
+  return (
+    <div className="popup-card popup-status">
+      <span className="popup-spinner" aria-hidden="true" />
+      <p className="popup-status-text">{request.prompt}</p>
     </div>
   );
 }

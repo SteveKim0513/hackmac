@@ -8,9 +8,15 @@
 # 조회라 osascript를 그대로 쓴다.
 queryOut=$(osascript <<'APPLESCRIPT'
 set entries to {}
+set RS to (ASCII character 31)
 tell application "Reminders"
   repeat with l in lists
     if (name of l) starts with "GTD " then
+      if (name of l) starts with "GTD 개인 " then
+        set cat to "개인"
+      else
+        set cat to "업무"
+      end if
       set nms to name of every reminder of l
       set cds to completed of every reminder of l
       set dds to due date of every reminder of l
@@ -18,7 +24,7 @@ tell application "Reminders"
         if (item i of cds) is false then
           set nm to item i of nms
           if (item i of dds) is missing value then
-            set end of entries to ("[대기] " & nm)
+            set end of entries to (cat & RS & "[대기] " & nm)
           else
             set diffSec to (current date) - (item i of dds)
             set h to diffSec div 3600
@@ -28,7 +34,7 @@ tell application "Reminders"
             else
               set dur to (m as string) & "분째"
             end if
-            set end of entries to ("[진행중 " & dur & "] " & nm)
+            set end of entries to (cat & RS & "[진행중 " & dur & "] " & nm)
           end if
         end if
       end repeat
@@ -40,10 +46,21 @@ return entries as text
 APPLESCRIPT
 )
 if [[ -n "$queryOut" ]]; then
-  entries=("${(@f)queryOut}")
+  rawEntries=("${(@f)queryOut}")
 else
-  entries=()
+  rawEntries=()
 fi
+# 업무를 먼저, 개인을 뒤에 두어 구간 헤더가 섞이지 않게 한다.
+entries=()
+personalEntries=()
+for entry in "${rawEntries[@]}"; do
+  if [[ "$entry" == 개인$'\x1f'* ]]; then
+    personalEntries+=("$entry")
+  else
+    entries+=("$entry")
+  fi
+done
+entries+=("${personalEntries[@]}")
 echo "Reminders 조회 완료: 삭제 대상 ${#entries[@]}개"
 
 if (( ${#entries[@]} == 0 )); then

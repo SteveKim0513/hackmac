@@ -1,6 +1,6 @@
 {
   "name": "hackmac",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "이 Mac으로 할 수 있는 일을 늘려주는 서비스 스토어",
   "main": "dist-electron/main.js",
   "author": "",

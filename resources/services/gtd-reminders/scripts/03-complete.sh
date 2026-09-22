@@ -5,40 +5,57 @@
 
 # 1. 진행중(마감일 있음 = 시작 표시)인 리마인더 이름 조회 — 순수 조회라
 # osascript를 그대로 쓴다.
-ongoingNamesRaw=$(osascript <<'APPLESCRIPT'
-set ongoingNames to {}
+ongoingEntriesRaw=$(osascript <<'APPLESCRIPT'
+set ongoingEntries to {}
+set RS to (ASCII character 31)
 tell application "Reminders"
   repeat with l in lists
     if (name of l) starts with "GTD " then
+      if (name of l) starts with "GTD 개인 " then
+        set cat to "개인"
+      else
+        set cat to "업무"
+      end if
       set nms to name of every reminder of l
       set cds to completed of every reminder of l
       set dds to due date of every reminder of l
       repeat with i from 1 to (count of nms)
         if (item i of cds) is false and (item i of dds) is not missing value then
-          set end of ongoingNames to (item i of nms)
+          set end of ongoingEntries to (cat & RS & (item i of nms))
         end if
       end repeat
     end if
   end repeat
 end tell
 set AppleScript's text item delimiters to linefeed
-return ongoingNames as text
+return ongoingEntries as text
 APPLESCRIPT
 )
-if [[ -n "$ongoingNamesRaw" ]]; then
-  ongoingNames=("${(@f)ongoingNamesRaw}")
+if [[ -n "$ongoingEntriesRaw" ]]; then
+  ongoingEntriesRaw=("${(@f)ongoingEntriesRaw}")
 else
-  ongoingNames=()
+  ongoingEntriesRaw=()
 fi
-echo "Reminders 조회 완료: 진행중 ${#ongoingNames[@]}개"
+# 업무를 먼저, 개인을 뒤에 두어 구간 헤더가 섞이지 않게 한다.
+ongoingItems=()
+personalOngoingItems=()
+for entry in "${ongoingEntriesRaw[@]}"; do
+  if [[ "$entry" == 개인$'\x1f'* ]]; then
+    personalOngoingItems+=("$entry")
+  else
+    ongoingItems+=("$entry")
+  fi
+done
+ongoingItems+=("${personalOngoingItems[@]}")
+echo "Reminders 조회 완료: 진행중 ${#ongoingItems[@]}개"
 
-if (( ${#ongoingNames[@]} == 0 )); then
+if (( ${#ongoingItems[@]} == 0 )); then
   osascript -e 'display notification "아직 시작한 일이 없어요 — 업무 시작으로 먼저 시작해보세요" with title "📋 완료할 일 없음"'
   exit 0
 fi
 
 # 2. 완료할 일 고르기.
-chosenName=$("$HACKMAC_POPUP" select --title "업무 완료" --prompt "무엇을 완료할까요?" --ok "완료" --cancel "취소" -- "${ongoingNames[@]}")
+chosenName=$("$HACKMAC_POPUP" select --title "업무 완료" --prompt "무엇을 완료할까요?" --ok "완료" --cancel "취소" -- "${ongoingItems[@]}")
 if [[ $? -ne 0 ]]; then
   exit 0
 fi

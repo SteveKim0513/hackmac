@@ -1,7 +1,7 @@
 #!/bin/zsh
 # @svc-name: 업무 공유하기
 # @svc-hotkey: Alt+0
-# @svc-description: 하루를 정리하며 팀에 남길 때 누르세요. 달력에서 날짜를 고르면 그 날짜에 완료한 업무 내역이 클립보드에 복사돼요(오늘을 고르면 진행중·대기 현황까지 함께 담겨요). 채널에 붙여넣기(⌘V)만 하면 끝이에요.
+# @svc-description: 하루를 정리하며 팀에 남길 때 누르세요. 달력에서 날짜를 고르면 그 날짜에 완료한 업무 내역과 지금 진행중인 업무 현황이 함께 클립보드에 복사돼요(진행중은 날짜와 무관하게 항상 담겨요). 개인 프로젝트는 공유 대상에서 빠지고 업무만 담겨요. 채널에 붙여넣기(⌘V)만 하면 끝이에요.
 
 # 1. 완료한 업무가 있는 날짜를 모아 달력에 점으로 표시할 수 있게 한다 —
 # 순수 조회(날짜별 whose 필터가 아니라 completion date 배열 통째 읽기)라
@@ -10,7 +10,7 @@ markedDatesRaw=$(osascript <<'APPLESCRIPT'
 set dateStrs to {}
 tell application "Reminders"
   repeat with l in lists
-    if (name of l) starts with "GTD " then
+    if (name of l) starts with "GTD " and not ((name of l) starts with "GTD 개인 ") then
       set cds to completed of every reminder of l
       set eds to completion date of every reminder of l
       repeat with i from 1 to (count of cds)
@@ -134,7 +134,8 @@ on run argv
 
     tell application "Reminders"
       repeat with l in lists
-        if (name of l) starts with "GTD " then
+        -- 개인 프로젝트는 공유 대상에서 뺀다 — 업무만 읽어 처리한다.
+        if (name of l) starts with "GTD " and not ((name of l) starts with "GTD 개인 ") then
           set nms to name of every reminder of l
           set cds to completed of every reminder of l
           set dds to due date of every reminder of l
@@ -175,10 +176,13 @@ on run argv
 
                 set end of doneLines to ("- " & nm & " (" & durText & ")")
               end if
-            else if isToday then
+            else
+              -- 진행중은 완료 여부와 달리 선택한 날짜에 묶인 개념이 아니라
+              -- "지금" 스냅샷이라, 어떤 날짜를 고르든 항상 담는다. 대기는
+              -- 기존처럼 오늘을 고른 경우에만 보여준다.
               set sd to item i of dds
               if sd is missing value then
-                set end of waitingLines to ("- " & nm)
+                if isToday then set end of waitingLines to ("- " & nm)
               else
                 set dsec to (current date) - sd
                 set end of ongoingLines to ("- " & nm & " (" & my fmtDur(dsec) & "째)")
@@ -202,7 +206,8 @@ on run argv
         "🗂 대기 " & (count of waitingLines) & linefeed & waitingText
     else
       set report to "📅 " & (my dateLabel(dayStart)) & " 업무 내역" & linefeed & ¬
-        "✅ 완료 " & (count of doneLines) & linefeed & doneText
+        "✅ 완료 " & (count of doneLines) & linefeed & doneText & linefeed & ¬
+        "🌀 진행중 " & (count of ongoingLines) & linefeed & ongoingText
     end if
 
     set the clipboard to report
