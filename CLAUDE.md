@@ -1,8 +1,9 @@
 # Claude Code Instructions
 
+공통 개발 규칙(일하는 법·코드 규칙·팀 원칙·스킬)은 스튜디오 플러그인 팀 문서가 맡는다. 이 문서는 이 프로젝트의 값만 둔다.
+
 ## Start Here
 
-- 작업 전 `git status --short` 확인.
 - 이 프로젝트는 [mac-shortcut-manager](../mac-shortcut-manager)에서 엔진(전역 단축키 등록, 스크립트 실행)만 가져오고 UI 철학은 정반대다 — 사용자가 단축키를 만드는 도구가 아니라, 완성된 "서비스"를 켜고 끄는 제품이다. 배경은 [LOCKED-DOWN-APP-PROPOSAL.md](LOCKED-DOWN-APP-PROPOSAL.md), 구조는 [README.md](README.md) 참고.
 - 새 서비스를 추가하기 전에 아래 "서비스 설계 원칙"을 읽는다.
 - mac-shortcut-manager에서 만든 단축어를 이 앱의 서비스로 옮기는 작업(승격)은 `/promote-to-playbook` 스킬로 진행한다 — 관계와 이유는 [docs/playbook-graduation.md](docs/playbook-graduation.md) 참고.
