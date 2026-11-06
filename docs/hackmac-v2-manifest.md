@@ -39,7 +39,7 @@
 
   "triggers": [
     { "kind": "resident", "script": "scripts/ticker.sh", "heartbeat": 60 },
-    { "kind": "hotkey", "script": "scripts/add-symbol.sh", "name": "종목 추가", "hotkey": "Alt+S", "description": "종목 코드를 입력하면 메뉴바 목록에 들어가요." },
+    { "kind": "hotkey", "script": "scripts/add-symbol.sh", "key": "add-symbol", "name": "종목 추가", "description": "종목 코드를 입력하면 메뉴바 목록에 들어가요." },
     { "kind": "schedule", "script": "scripts/daily-summary.sh", "name": "장 마감 요약", "cron": "0 16 * * 1-5" }
   ],
 
@@ -93,14 +93,28 @@ v1 `ServiceManifest`와 같다: `name`, `icon`, `accentColor`, `tagline`, `whatI
 
 | kind | 뜻 | 추가 항목 |
 |---|---|---|
-| `hotkey` | 전역 단축키를 누르면 1회 실행 | `name`, `hotkey`, `description` (v1 `@svc-*`와 같은 뜻) |
+| `hotkey` | 전역 단축키를 누르면 1회 실행 | `key`(앱 안에서 이 트리거를 가리키는 이름), `name`, `description`. **실제 키 조합은 적지 않는다** — 아래 3.3.1 |
 | `resident` | 켜 있는 동안 계속 돈다 | `heartbeat`(초): 이 간격 안에 생존 신호가 없으면 실행기가 멈춘 것으로 본다 |
 | `schedule` | 정해진 때 1회 실행 | `cron`(5칸) 또는 `every`(초) 중 하나, `name` |
 | `login` | HackMac이 뜰 때 1회 실행 | `name` |
 | `event` | 플랫폼 사건에 반응 | `on`: 능력이 내는 사건 이름(예: `wake`, `network.up`). 능력 모듈이 어떤 사건을 내는지는 능력 선언이 정한다 |
 
-- 같은 `hotkey`를 두 앱이 선언하면 나중에 켜는 앱이 "단축키 충돌"로 켜지지 않고, 사용자가 바꿔야 한다(v1 `HotkeyRegistrar`의 클레임 추적 유지).
 - `resident`는 앱당 하나.
+
+#### 3.3.1 단축키 자리(slot) 배정 [결정]
+
+앱은 키 조합을 고르지 않고 **자리를 요청**한다. HackMac이 켤 때 빈 자리를 배정한다.
+
+- **자리 목록 [시작값]**: `Alt+1`~`Alt+0`, `Alt+Shift+1`~`Alt+Shift+0`의 20자리. 그중 2자리는 HackMac 몫으로 예약: "단축키 목록 보기"(치트시트 팝업), "HackMac 열기". 앱이 쓸 수 있는 자리는 18개. `Ctrl+Alt+숫자`로 바꿀 수 있다(아래 비용 참고).
+- 배정은 사용자 데이터(`settings.json`)에 `<app-id>/<key> → 자리`로 저장한다. 패키지에는 없다. 레시피·앱 파일에 키가 박히지 않으므로 받는 사람은 자기 빈 자리를 받는다.
+- 앱을 끄면 자리를 돌려준다. 다시 켜면 같은 자리가 비어 있으면 같은 자리, 아니면 새 자리.
+- 자리가 다 차면 켜기 전에 "단축키 자리가 없어요 → 다른 앱의 자리 바꾸기" 화면을 보여 준다. 켜지지 않는다.
+- 사용자는 설정에서 자리를 바꿀 수 있되 **목록 안에서만**. 임의 키 지정은 1차에 넣지 않는다.
+- 배정된 키는 트레이 메뉴와 앱 상세에 늘 보이고, 치트시트 단축키로 전체 목록이 뜬다.
+- 스토어 카피(`usage` 등)에 키를 직접 쓰지 않고 `{hotkey:<key>}` 자리표시를 넣는다. 화면이 배정된 키로 채운다. v1 GTD 카피의 "(Alt+1)"은 이 규칙으로 바꾼다.
+- 등록은 v1 `HotkeyRegistrar`의 클레임 추적을 그대로 쓴다(`globalShortcut.register`가 조용히 덮어쓰는 문제 방지).
+
+비용: 전역 단축키는 그 조합을 모든 앱에서 가로챈다. `Alt+숫자`는 macOS에서 특수문자(`¡™£`)를 입력하는 키라 그걸 쓰는 사용자는 입력이 막힌다(v1도 같은 비용). `Ctrl+Alt+숫자`가 더 안전할 수 있으나 실제로 눌러 보고 정한다 **[확인 필요]**.
 
 ### 3.4 능력 요구
 
@@ -157,7 +171,7 @@ v1 `ServiceManifest`와 같다: `name`, `icon`, `accentColor`, `tagline`, `whatI
 6. 스크립트 안에 절대경로(`/Users/`), API 키처럼 보이는 문자열, `capabilities`에 없는 능력 호출, `permissions.automation`에 없는 `tell application`이 없는가(이식성·권한 일치).
 7. 스크립트가 OpenAI·Anthropic API를 직접 부르지 않는가(`ai` 능력으로만, [plan 13.1](hackmac-v2-plan.md#131-원칙-결정-앱은-참고만-의존은-플랫폼이)).
 8. 패키지 안에 `node_modules/`, 바이너리, 심볼릭 링크가 없는가.
-9. `hotkey` 형식이 Electron 가속기 문법에 맞는가.
+9. `hotkey` 트리거의 `key`가 앱 안에서 유일하고, 선언에 키 조합(`Alt+…`)이 직접 적혀 있지 않은가. 카피에 `Alt+`·`Cmd+` 같은 키 조합이 직접 쓰이지 않았는가(`{hotkey:<key>}`만 허용).
 
 6~8은 "정직한 앱"을 거르는 검사다. 선언보다 많은 일을 하는 악의적 스크립트는 못 막는다.
 
@@ -166,13 +180,14 @@ v1 `ServiceManifest`와 같다: `name`, `icon`, `accentColor`, `tagline`, `whatI
 | | v1 | v2 | 이유 |
 |---|---|---|---|
 | 단축키 메타데이터 | 스크립트 헤더 `@svc-name` 등 | `manifest.triggers[]` | 상주·스케줄·로그인은 "스크립트 하나당 단축키 하나"로 표현되지 않는다. 설치 때 기계가 검증해야 하므로 한 파일에 모은다. v1의 "DB를 따로 두지 않는다"는 원칙은 유지된다(manifest가 그 자리) |
+| 단축키 조합 | 앱이 정함(`@svc-hotkey: Alt+1`) | HackMac이 자리 목록에서 배정 | 충돌 없음, 이식성, 에이전트가 안전한 키를 추측할 필요 없음 |
 | 서비스 id | `gtd-reminders` | `<작성자>.<이름>` | 다른 사람의 앱과 충돌 방지 |
 | 버전 | 없음(앱 번들 버전) | 앱마다 정수 | 되돌리기, 자동 수정 |
 | 능력 | 암묵(`$HACKMAC_POPUP` 환경변수) | 선언 + 버전 범위 | 앱이 HackMac보다 오래 산다 |
 | 권한 | 없음 | 선언 | 설치 때 요약 |
 | 설정/비밀 | 스크립트 안 상수 | 선언 + 환경변수 | 이식성 |
 
-v1 GTD 서비스를 v2 앱으로 옮길 때는 `@svc-*` 헤더를 `triggers`로 뽑는 변환 한 번이면 된다(`electron/parser.ts`가 이미 읽는다).
+v1 GTD 서비스를 v2 앱으로 옮길 때는 `@svc-*` 헤더를 `triggers`로 뽑는 변환 한 번이면 된다(`electron/parser.ts`가 이미 읽는다). `@svc-hotkey` 값은 버리고 `key`만 남기며, 카피의 "(Alt+1)"은 `{hotkey:<key>}`로 바꾼다.
 
 ## 6. 정해야 할 것
 
