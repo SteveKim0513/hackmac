@@ -83,6 +83,8 @@ test('만들던 앱의 계정을 옮긴다: 알림 글이 남고, 이후 글은 
 
   await page.locator('.create-app-button').click();
   await page.locator('.composer textarea').fill('안녕');
+  // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+  await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
   await page.locator('.composer textarea').press('Enter');
   await expect(page.locator('.bubble-assistant').last()).toHaveText('echo:안녕', { timeout: 10_000 });
 
@@ -97,6 +99,8 @@ test('만들던 앱의 계정을 옮긴다: 알림 글이 남고, 이후 글은 
   await expect(page.locator('.bubble-user')).toHaveText('안녕');
 
   await page.locator('.composer textarea').fill('이어서');
+  // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+  await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
   await page.locator('.composer textarea').press('Enter');
   await expect(page.locator('.bubble-assistant').last()).toHaveText('echo:이어서', { timeout: 10_000 });
 });

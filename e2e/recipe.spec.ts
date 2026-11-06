@@ -12,6 +12,8 @@ test.afterEach(async () => {
 
 const say = async (page: import('@playwright/test').Page, text: string, expectReply: string) => {
   await page.locator('.composer textarea').fill(text);
+  // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+  await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
   await page.locator('.composer textarea').press('Enter');
   await expect(page.locator('.bubble-assistant').last()).toHaveText(expectReply, { timeout: 10_000 });
 };
@@ -53,6 +55,8 @@ test('대화 → 레시피 만들기(빈칸만, 개인 값은 안 나감) → �
   await page.locator('.create-app-button').click();
   await expect(page.locator('.chat-empty')).toContainText('레시피가 있으면 여기에 그대로 붙여넣으세요');
   await page.locator('.composer textarea').fill(sent);
+  // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+  await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
   await page.locator('.composer textarea').press('Enter');
   await expect(page.locator('.bubble-user')).toContainText('HackMac 레시피 v1');
   await expect(page.locator('.bubble-assistant').last()).toContainText('echo:HackMac 레시피 v1', { timeout: 10_000 });

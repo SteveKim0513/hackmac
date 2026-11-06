@@ -32,6 +32,8 @@ for (const vendor of ['claude', 'codex'] as const) {
     const say = async (text: string) => {
       const before = await finished.count();
       await page.locator('.composer textarea').fill(text);
+      // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+      await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
       await page.locator('.composer textarea').press('Enter');
       await expect(finished).toHaveCount(before + 1, { timeout: 900_000 });
       await expect(page.locator('.composer button[type="submit"]')).toBeVisible({ timeout: 900_000 });
@@ -62,6 +64,8 @@ for (const vendor of ['claude', 'codex'] as const) {
     if (await ask.isVisible()) await page.locator(`.vendor-card[data-vendor="${vendor}"] button`).click();
     await create.click();
     await page.locator('.composer textarea').fill('회의 10분 전에 화면에 크게 알려 주는 앱을 만들고 싶어');
+    // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+    await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
     await page.locator('.composer textarea').press('Enter');
     const reply = page.locator('.bubble-assistant:not(.is-streaming):not(.is-typing)').last();
     await expect(reply).toHaveText(/[가-힣]/, { timeout: 150_000 });

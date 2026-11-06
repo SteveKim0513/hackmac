@@ -48,6 +48,8 @@ for (const vendor of ['claude', 'codex'] as const) {
     await page.locator('.create-app-button').click({ timeout: 10_000 });
     await expect(page.locator('.thread-page')).toBeVisible();
     await page.locator('.composer textarea').fill('메뉴바에 시계');
+    // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+    await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
     await page.locator('.composer textarea').press('Enter');
     await expect(page.locator('.bubble-user')).toHaveText('메뉴바에 시계');
     await expect(page.locator('.bubble-assistant').last()).toHaveText('echo:메뉴바에 시계', { timeout: 10_000 });
@@ -67,6 +69,8 @@ for (const vendor of ['claude', 'codex'] as const) {
     await page.locator(`.vendor-card[data-vendor="${vendor}"] button`).click({ timeout: 10_000 });
     await page.locator('.create-app-button').click();
     await page.locator('.composer textarea').fill('build-demo');
+    // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+    await expect(page.locator('.composer button[type=submit]')).toBeEnabled();
     await page.locator('.composer textarea').press('Enter');
     await expect(page.locator('.build-box.is-done')).toBeVisible({ timeout: 60_000 });
     await expect(page.locator('.req-row.is-passed .req-text')).toHaveText('단축키를 누르면 오늘 날짜를 알림으로 보여 준다');
@@ -91,6 +95,8 @@ test('내보내기 → 새 HackMac에서 앱 파일 설치: 미리 보기 확인
     const a = await open({ claude: 'in', env: { HACKMAC_E2E_SAVE_DIR: outDir } });
     await a.locator('.create-app-button').click({ timeout: 10_000 });
     await a.locator('.composer textarea').fill('build-demo');
+    // 입력이 React 상태에 반영돼 보내기 버튼이 켜진 뒤에 Enter를 누른다(안 기다리면 가끔 빈 글로 읽혀 안 나간다)
+    await expect(a.locator('.composer button[type=submit]')).toBeEnabled();
     await a.locator('.composer textarea').press('Enter');
     await expect(a.locator('.build-box.is-done')).toBeVisible({ timeout: 60_000 });
     await a.locator('.build-box.is-done button').click();

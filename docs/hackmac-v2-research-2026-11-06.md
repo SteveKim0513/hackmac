@@ -112,3 +112,14 @@ Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두
 5. `--role=studio` 두 번째 실행 때 단일 인스턴스 락·Dock·Cmd-Tab 동작.
 6. ~~Codex app-server 스키마 고정(3절).~~ 해결(3절).
 7. electron-updater가 번들을 교체한 뒤 launchd가 새 바이너리로 재시작하는지.
+
+### 5.1 첫 서명 빌드에서 확인한 것 (2026-11-06, v2 가지, 버전 0.2.9)
+
+`npm run dist` 한 줄로 E2E → 서명 → 공증까지 통과했다.
+
+- `spctl -a -vv` → `accepted`, `source=Notarized Developer ID`. `stapler validate`(앱) 통과. `codesign --verify --deep --strict` 통과. 런타임 강화(`flags=0x10000(runtime)`) 켜짐.
+- 상주 agent plist가 `Contents/Library/LaunchAgents/`에 들어갔고 `plutil`이 읽는다(KeepAlive.SuccessfulExit=false, RunAtLoad, `--role=resident`).
+- dmg 자체에는 티켓이 스테이플돼 있지 않다(`stapler validate` 65). electron-builder는 앱만 스테이플한다. 안의 앱이 스테이플돼 있어 오프라인에서도 열린다.
+- 이 빌드의 버전이 이미 설치된 v1 라인(0.2.9)과 같다. 배포 전에 올려야 자동 업데이트가 새 버전으로 본다.
+
+아직 못 한 것: 위 1~5·7번. 실제로 띄워야 아는 것들이고, 사용자의 진짜 HackMac(`/Applications`, 같은 userData)과 겹쳐서 사용자 결정을 기다린다.
