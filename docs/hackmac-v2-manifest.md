@@ -85,7 +85,14 @@
 
 ### 3.2 스토어 카피
 
-v1 `ServiceManifest`와 같다: `name`, `icon`, `accentColor`, `tagline`, `whatItIs`, `differentiators`, `strengths`, `usage`. 쓰는 기준은 [service-copy-guide.md](service-copy-guide.md). **제작 모듈이 쓴다** — 사용자가 쓰지 않는다.
+항목은 v1 `ServiceManifest`와 같다. 쓰는 기준은 [service-copy-guide.md](service-copy-guide.md). **제작 모듈이 쓴다** — 사용자가 쓰지 않는다.
+
+| 구분 | 항목 | 비고 |
+|---|---|---|
+| **필수** | `name`, `icon`, `tagline`, `usage` | 혼자 쓰는 앱에도 있어야 하는 최소. `usage`는 트리거마다 한 줄 |
+| 선택 | `accentColor`, `whatItIs`, `differentiators`, `strengths` | 공유(내보내기·레시피)할 때 제작 모듈이 채우자고 제안한다. 없으면 상세 화면에서 그 구간이 빠진다 |
+
+**[결정]** 혼자 쓰는 앱에 `differentiators` 6줄은 과하다. 공유 시점에 채우는 것이 카피의 쓸모(받는 사람이 효용을 체감)와도 맞는다.
 
 ### 3.3 트리거
 
@@ -195,4 +202,3 @@ v1 GTD 서비스를 v2 앱으로 옮길 때는 `@svc-*` 헤더를 `triggers`로 
 2. **`event` 트리거의 사건 어휘.** 어떤 능력이 어떤 사건을 내는지. 1차에 넣을지.
 3. **`ai` 능력의 인터페이스.** 글 한 덩이 → 글 한 덩이면 충분한가, 도구 호출까지 여는가. 백그라운드 앱의 한도 소모 표시와 연결.
 4. **`version`을 정수로 할지.** 사용자가 버전을 직접 정할 일이 없다는 전제. 레시피로 다시 만든 앱은 1부터 다시 시작.
-5. **스토어 카피 8항목을 전부 필수로 둘지.** 사용자가 혼자 쓰는 앱에 `differentiators` 6줄은 과하다. "짧은 카피"(name·tagline·usage만)와 "완전 카피"를 나눌지.
