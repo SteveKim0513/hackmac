@@ -9,7 +9,7 @@
  */
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, cpSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AccountStore, configDirOf } from '../modules/account/accounts';
@@ -19,7 +19,9 @@ import { cliStatus, envFor, resolveBin, run, searchDirs, VENDORS, type Vendor } 
 import { createLogins, fileLogger, type LoginView } from '../modules/account/login';
 import { createInstalls, type InstallView } from '../modules/prepare/install';
 import type { Platform } from '../modules/platform/platform';
-import { agentOptions, builderInstructions, type AgentPaths } from '../modules/build/agent';
+import { agentOptions, builderInstructions, editContext, roleInstructions, type AgentPaths } from '../modules/build/agent';
+import { ROLES, type RoleId } from '../modules/build/roles';
+import { KnowledgeStore } from '../modules/knowledge/knowledge';
 import { Builder } from '../modules/build/builder';
 import { ProgressLog, type BuildState } from '../modules/build/progress';
 import { Compactor } from '../modules/memory/compactor';
@@ -158,6 +160,34 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
   const appleGuide = (() => { try { return readFileSync(docs.appleGuide, 'utf8').slice(0, 6000); } catch { return undefined; } })();
   const macos = macosVersion();
 
+  // ── 전문 담당(역할별 지시문·엔진) ─────────────────
+  const packageSpec = readFileSync(path.join(docs.roles, 'package-spec.md'), 'utf8');
+  const roleText = (role: RoleId): string => {
+    const md = readFileSync(path.join(docs.roles, ROLES[role].file), 'utf8');
+    const makes = role === 'designer' || role === 'developer' || role === 'tester' || role === 'copywriter';
+    return roleInstructions(md, {
+      packageSpec: makes ? packageSpec : undefined,
+      capabilities: role === 'copywriter' ? undefined : capabilitiesText,
+      copyGuidePath: docs.copyGuide,
+      docs: role === 'designer' || role === 'developer' ? agentPaths.docs : undefined,
+    });
+  };
+  const knowledge = new KnowledgeStore(path.join(app.getPath('userData'), 'knowledge', 'lessons.jsonl'));
+  /** 역할을 맡을 엔진: builder 쪽은 이 스레드의 회사·계정, other 쪽은 다른 회사(로그인돼 있으면) */
+  const roleEngine = (threadId: string, role: RoleId): { v: Vendor; bin: string; env: Record<string, string> } | null => {
+    const meta = threads.get(threadId);
+    const mine = meta?.vendor ?? platform.settings.get().engine;
+    const myAccount = mine ? meta?.account ?? accounts.activeId(mine) : null;
+    const minePair: [Vendor, string][] = mine && myAccount ? [[mine, myAccount]] : [];
+    const others: [Vendor, string][] = VENDORS.filter((v) => v !== mine).map((v): [Vendor, string] => [v, accounts.activeId(v)]);
+    const order = ROLES[role].side === 'builder' ? [...minePair, ...others] : [...others, ...minePair];
+    for (const [v, a] of order) {
+      const e = engineFor(v, a);
+      if (e) return { v, ...e };
+    }
+    return null;
+  };
+
   const builders = new Map<string, Builder>();
   const builderFor = (threadId: string): Builder => {
     let b = builders.get(threadId);
@@ -202,6 +232,43 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
         return r.ok ? { ok: true, id: r.id, version: r.version } : { ok: false, errors: r.errors };
       },
       onState: (state: BuildState) => broadcast('build:state', { threadId, state }),
+      roleBy: (role) => {
+        const e = roleEngine(threadId, role);
+        return e ? VENDOR_NAME[e.v] : '없음';
+      },
+      runRole: async (role, prompt, signal) => {
+        const e = roleEngine(threadId, role);
+        if (!e) throw new Error(`${ROLES[role].label}를 맡을 AI 계정이 로그인돼 있지 않아요`);
+        const instructions = roleText(role);
+        const t0 = Date.now();
+        appLog.info('studio', `스레드 ${threadId} ${ROLES[role].label} 시작(${VENDOR_NAME[e.v]})`);
+        try {
+          if (ROLES[role].tools === 'files') {
+            // 작업 폴더 안에서만 읽고 쓴다(제작 에이전트와 같은 격리)
+            const extra = agentOptions(e.v, work, agentPaths);
+            return await askOnce(e.v, { bin: e.bin, cwd: work, instructions, ...extra, env: { ...e.env, ...(extra.env ?? {}) } }, prompt, 20 * 60_000, undefined, signal);
+          }
+          const tmp = realpathSync(mkdtempSync(path.join(os.tmpdir(), `hackmac-${role}-`)));
+          try {
+            return await askOnce(e.v, { bin: e.bin, cwd: tmp, env: e.env, instructions, allowedTools: [] }, prompt, 10 * 60_000, undefined, signal);
+          } finally {
+            rmSync(tmp, { recursive: true, force: true });
+          }
+        } finally {
+          appLog.info('studio', `스레드 ${threadId} ${ROLES[role].label} 끝 ${Math.round((Date.now() - t0) / 1000)}초`);
+        }
+      },
+      lessons: () => knowledge.recent(12),
+      learn: (kind, text) => {
+        const l = knowledge.add(kind, text, threadId);
+        if (l) appLog.info('studio', `배운 것 추가(${kind}): ${l.text}`);
+      },
+      onPipelineEnd: (o, text) => {
+        appLog.info('studio', `스레드 ${threadId} 제작 ${o.ok ? `끝: ${o.appId} v${o.version}` : `실패(${o.stage}): ${o.reason}`}`);
+        void chats.relay(threadId, text).then((r) => {
+          if (!r.ok) appLog.warn('studio', `스레드 ${threadId} 결과 전달 실패: ${r.reason}`);
+        });
+      },
     });
     b.start();
     builders.set(threadId, b);
@@ -263,6 +330,15 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
       return isCurrent(m, msgs) ? renderForSession(m, msgs) : null;
     },
     recipe: { detect: (t) => parseRecipe(t) !== null, instructions: recipeInstructions, title: recipeTitle },
+    // 배운 것(앱을 넘어 쌓인 함정·취향)과, 설치된 앱을 고치는 중이면 그 사정
+    context: (id) => {
+      const parts: string[] = [];
+      const lessons = knowledge.recent(12);
+      if (lessons.length) parts.push(['## 지난 제작에서 배운 것', ...lessons.map((l) => `- ${l}`)].join('\n'));
+      const st = new ProgressLog(path.join(threads.dirOf(id), 'progress.jsonl')).state();
+      if (st.edit) parts.push(editContext(st.edit.appId, st.edit.version, st.requirements.length));
+      return parts.length ? parts.join('\n\n') : null;
+    },
     activeAccount: (v) => accounts.activeId(v),
     accountLabel: (id) => accounts.get(id)?.label ?? '삭제된 계정',
     engineFor,
@@ -342,7 +418,14 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
     if (/^https:\/\//.test(url)) void shell.openExternal(url);
   });
 
-  ipcMain.handle('threads:list', (): ThreadView[] => threads.list().map((meta) => ({ meta, messages: [], busy: chats.busy(meta.id) })));
+  const progressOf = (id: string) => new ProgressLog(path.join(threads.dirOf(id), 'progress.jsonl')).state();
+  // editing: 설치된 앱을 고치는 중(홈의 "만드는 중"에 다시 보인다). building: 전문 담당들이 일하는 중
+  ipcMain.handle('threads:list', (): ThreadView[] =>
+    threads.list().map((meta) => {
+      const st = progressOf(meta.id);
+      return { meta, messages: [], busy: chats.busy(meta.id), editing: st.edit !== null, building: builders.get(meta.id)?.busy ?? false };
+    }),
+  );
   ipcMain.handle('threads:create', (_e, title: string): ThreadMeta => threads.create(String(title ?? '')));
   ipcMain.handle('threads:get', (_e, id: string): ThreadView | null => {
     const meta = threads.get(id);
@@ -385,6 +468,37 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
   });
 
   const threadOf = (appId: string) => threads.list().find((t) => t.appId === appId) ?? null;
+
+  /**
+   * 앱 상세의 [수정하기]: 그 앱의 스레드를 다시 연다(없으면 새로 만든다 — 작업실 밖에서 온 앱·기본 앱).
+   * 수정을 시작할 때 작업 폴더의 app/을 지금 설치된 버전으로 맞춘다(유지보수로 바뀐 버전이 있을 수 있다).
+   * 이미 고치는 중이거나 만드는 중이면 그 스레드로 돌아가기만 한다.
+   */
+  ipcMain.handle('apps:edit', async (_e, rawId: string): Promise<{ ok: true; threadId: string } | { ok: false; error: string }> => {
+    const appId = String(rawId);
+    const dir = platform.store.currentDir(appId);
+    if (!dir) return { ok: false, error: '설치돼 있지 않은 앱이에요' };
+    const read = readPackage(dir);
+    let t = threadOf(appId);
+    if (!t) {
+      t = threads.create(read.ok ? read.manifest.name : appId);
+      t = threads.update(t.id, { appId });
+    }
+    const b = builderFor(t.id);
+    const st = b.state();
+    if (b.busy || st.edit) return { ok: true, threadId: t.id };
+    const app = path.join(realpathSync(threads.workDir(t.id)), 'app');
+    rmSync(app, { recursive: true, force: true });
+    cpSync(dir, app, { recursive: true });
+    const version = platform.store.get(appId)?.current ?? 1;
+    b.startEdit(appId, version);
+    // 다음 글부터 "고치는 중" 사정을 붙여 엔진을 새로 연다(대화 기록·세션은 그대로)
+    await chats.close(t.id);
+    const message = threads.append(t.id, { role: 'notice', text: `이 앱을 고치기 시작해요(지금 ${version}번째 버전). 바꾸고 싶은 점을 편하게 말해 주세요. 기존에 정한 것은 그대로 지켜요.` });
+    broadcast('chat:event', { threadId: t.id, event: { kind: 'message', message } });
+    appLog.info('studio', `앱 수정 시작: ${appId} v${version} → 스레드 ${t.id}`);
+    return { ok: true, threadId: t.id };
+  });
   const services: StudioServices = {
     pickEngine: () => {
       const vendor = platform.settings.get().engine;

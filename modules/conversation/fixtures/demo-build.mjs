@@ -12,29 +12,71 @@ const build = (...args) => {
   return `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
 };
 
-/** "build-demo": 오늘 날짜 앱을 만들어 submit까지. 마지막 submit 출력을 답으로 돌려준다 */
-export const demoBuild = (cwd) => {
+/** "build-demo": 요구 정리 담당이 하는 일 — 요구사항(합격 기준 포함) → 평가 → handoff. 나머지는 전문 담당들(roleReply)이 한다 */
+export const demoBuild = () => {
   if (!process.env.HACKMAC_BUILD) return 'HACKMAC_BUILD가 없음';
   build('step', '1', '정리하는 중');
-  build('req', 'R1', '단축키를 누르면 오늘 날짜를 알림으로 보여 준다');
+  build('req', 'R1', '단축키를 누르면 오늘 날짜를 알림으로 보여 준다', '--accept', '날짜가 YYYY-MM-DD로 보인다');
   build('step', '2', '가능한지 확인하는 중');
   const ev = build('evaluate');
-  build('step', '3', '앱을 만드는 중');
+  const h = build('handoff');
+  return [`평가: ${ev.split('\n')[0]}`, h.split('\n')[0]].join('\n');
+};
+
+const writeTodayApp = (cwd, version = '1') => {
   const app = join(cwd, 'app');
   mkdirSync(join(app, 'scripts'), { recursive: true });
-  mkdirSync(join(app, 'checks'), { recursive: true });
   writeFileSync(join(app, 'manifest.json'), JSON.stringify({
-    schema: 1, id: 'my.today', version: '1', author: { name: 'me', signature: null }, hackmac: { min: '2.0.0' },
+    schema: 1, id: 'my.today', version, author: { name: 'me', signature: null }, hackmac: { min: '2.0.0' },
     name: '오늘 날짜', icon: '📅', tagline: '{hotkey:show} 누르면 오늘 날짜가 떠요', usage: ['{hotkey:show}를 누른다'],
     triggers: [{ kind: 'hotkey', script: 'scripts/show.sh', key: 'show', name: '날짜 보기', description: '알림으로 오늘 날짜를 보여 줘요' }],
     capabilities: {}, permissions: { network: [], automation: [], accessibility: false, fullDiskAccess: false }, settings: [], secrets: [], references: [],
   }));
   writeFileSync(join(app, 'scripts', 'show.sh'), '#!/bin/zsh\nd=$(date +%F)\necho "판단: 날짜=$d"\n[[ "$HACKMAC_CHECK" == 1 ]] && { print -r -- "$d" > "$HACKMAC_DATA_DIR/shown.txt"; exit 0; }\nosascript -e "display notification \\"$d\\" with title \\"오늘\\""\n');
-  writeFileSync(join(app, 'checks', 'R1-shows-date.sh'), '#!/bin/zsh\nzsh "$HACKMAC_APP_DIR/scripts/show.sh" && [[ "$(cat "$HACKMAC_DATA_DIR/shown.txt")" == "$(date +%F)" ]]\n');
-  build('step', '4', '스스로 시험하는 중');
-  const verify = build('verify');
-  const submit = build('submit');
-  return [`평가: ${ev.split('\n')[0]}`, `검증: ${verify.split('\n')[0]}`, submit.split('\n')[0]].join('\n');
+};
+
+const reqIds = (text) => [...new Set([...text.matchAll(/^(R\d+)\. /gm)].map((m) => m[1]))];
+
+/**
+ * 전문 담당으로 불렸으면(프롬프트 첫 줄 "너는 HackMac의 … 담당이다") 그 역할의 일을 한다(modules/build/roles.ts의 프롬프트). 아니면 null.
+ * 파일을 쓰는 담당은 작업 폴더(cwd)에 쓴다 — 진짜 담당과 같은 자리.
+ */
+export const roleReply = (text, cwd = process.cwd()) => {
+  if (text.startsWith('너는 HackMac의 채점 담당이다')) {
+    const items = reqIds(text).flatMap((id) => [
+      { id: `${id}.1`, req: id, criterion: '단축키를 누르면 오늘 날짜가 알림으로 뜬다', how: 'manual' },
+      { id: `${id}.2`, req: id, criterion: '보여 줄 날짜가 date +%F와 같다', how: 'auto' },
+    ]);
+    return JSON.stringify({ items });
+  }
+  if (text.startsWith('너는 HackMac의 서비스 설계 담당이다')) {
+    mkdirSync(join(cwd, 'spec'), { recursive: true });
+    writeFileSync(join(cwd, 'spec', 'design.md'), `# 설계\n${reqIds(text).map((id) => `## ${id}\nshow.sh가 date +%F를 읽어 알림으로 띄운다.`).join('\n')}\n`);
+    return '설계를 마쳤다';
+  }
+  if (text.startsWith('너는 HackMac의 개발 담당이다')) {
+    if (text.includes('번째 보완')) return '고칠 것이 없었다';
+    // 설치된 앱을 고치는 일이면 버전을 1 올린다(진짜 담당도 그렇게 하라고 지시받는다)
+    let version = '1';
+    if (text.includes('이미 설치돼 있는 앱이다')) {
+      try { version = String(Number(JSON.parse(readFileSync(join(cwd, 'app', 'manifest.json'), 'utf8')).version) + 1); } catch { version = '2'; }
+    }
+    writeTodayApp(cwd, version);
+    return `오늘 날짜를 알림으로 보여 주는 앱을 만들었다(버전 ${version})`;
+  }
+  if (text.startsWith('너는 HackMac의 카피 담당이다')) return '카피를 마쳤다';
+  if (text.startsWith('너는 HackMac의 시험 담당이다')) {
+    const checks = join(cwd, 'app', 'checks');
+    mkdirSync(checks, { recursive: true });
+    writeFileSync(join(checks, 'R1-shows-date.sh'), '#!/bin/zsh\n# 기준: R1.2\nzsh "$HACKMAC_APP_DIR/scripts/show.sh" && [[ "$(cat "$HACKMAC_DATA_DIR/shown.txt")" == "$(date +%F)" ]]\n');
+    return 'R1 시험을 만들었다';
+  }
+  if (text.startsWith('너는 HackMac의 목표 달성 감사 담당이다')) {
+    const goals = reqIds(text.split('## 서비스 기준')[0]).map((id) => ({ id, met: true, evidence: 'scripts/show.sh가 date +%F로 날짜를 만들어 display notification으로 띄운다', gap: '' }));
+    const baseline = ['S2', 'S3', 'S4', 'S5', 'S6', 'S8'].map((id) => ({ id, met: true, evidence: 'scripts/show.sh와 manifest.json 확인', gap: '' }));
+    return JSON.stringify({ goals, baseline });
+  }
+  return null;
 };
 
 /** 유지보수 팀으로 불렸으면 고치는 행동을 한다(modules/maintain/team.ts의 프롬프트). 아니면 null */

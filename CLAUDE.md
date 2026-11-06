@@ -10,6 +10,7 @@
 
 ## 서비스 설계 원칙
 
+- **앱이 "서비스"가 되는 기준은 [docs/service-baseline.md](docs/service-baseline.md)(S1~S10)에 있다.** 게이트·감사·전문 담당 지시가 모두 이 문서를 따른다 — 기준을 바꾸면 `modules/build/gate.ts`(baseline 검사), `modules/build/audit.ts`(BASELINE_AUDIT), `resources/agent/roles/package-spec.md`를 같이 고친다.
 - 서비스 하나 = `resources/services/<id>/manifest.json` (스토어 설명) + `scripts/*.sh` (단축키 하나당 스크립트 하나).
 - 스크립트의 이름/설명은 `# @svc-name`, `# @svc-description` 헤더 주석에만 존재한다 — 별도 DB나 설정 파일을 만들지 않는다. 앱 시작 시 `modules/store/fromV1.ts`가 이 헤더를 읽어 v2 앱 패키지로 바꿔 보관소(`userData/apps/hackmac.<id>/`)에 넣는다. **`# @svc-hotkey`는 v2에서 무시된다** — 단축키는 앱이 고르지 않고 HackMac이 자리 풀(⌥1…⌥0, ⌥⇧1…)에서 배정한다(`modules/hotkey/slots.ts`, [docs/hackmac-v2-manifest.md](docs/hackmac-v2-manifest.md) 3.3.1). 카피에 키 조합을 직접 쓰지 말고 `(Alt+1)`처럼 쓴 것은 변환기가 `{hotkey:<key>}`로 바꾼다.
 - **스크립트가 사용자와 상호작용해야 하는 순간(목록에서 고르기, 텍스트 입력받기, 확인받기)은 osascript의 `choose from list`/`display dialog`로 직접 그리지 않는다 — HackMac 앱에게 그려달라고 요청한다.** "완성된 서비스를 켜고 끄는 제품"이라는 이 앱의 정체성상, 사용자가 보는 화면은 팝업까지 포함해 전부 [docs/design.md](docs/design.md)에 정의된 하나의 디자인 시스템을 따라야 한다 — macOS 기본 다이얼로그의 각지고 이질적인 룩을 그대로 노출하면 안 된다. 방법: 스크립트는 `"$HACKMAC_POPUP" select|prompt|confirm ...`(`resources/bin/hackmac-popup`)를 호출해 표준입력으로 선택/입력값을 돌려받는다. 이 호출은 로컬 유닉스 소켓(`electron/popupServer.ts`)을 거쳐 이미 실행 중인 HackMac 앱이 Electron 팝업 창(`electron/popupWindow.ts` + `src/popup/`)을 띄우는 것으로 이어진다. **이건 서비스를 "감싸는" 새로운 레이어가 아니라, 원래 osascript가 하던 여러 역할 중 딱 하나(다이얼로그 렌더링)만 앱에 위임하는 것이다** — Reminders 조회/수정, 시간 계산, 알림 표시 등 나머지 업무 로직은 여전히 스크립트(및 그 안의 osascript) 소유다. 부수 효과로, 여러 다이얼로그를 순서대로 띄우는 스크립트에서 매번 `activate`를 재호출해야 했던 AppleScript 포커스 문제(아래 "환경에서 겪은 것들" 참고)가 사라진다 — 포커스는 이제 Electron 창의 `show()/focus()`가 책임진다. 정보 표시만 하고 상호작용이 없는 `display notification`은 그대로 둔다(팝업이 아니라 배너라 이 규칙 대상이 아님).
@@ -94,8 +95,12 @@ modules/maintain/        ─ 자가 유지보수: classify(코드가 먼저 원�
 electron/maintainHost.ts ─ 유지보수의 팝업·알림·IPC·1분 타이머. 앱 상세의 "유지보수" 구역과 짝
 modules/bundle/          ─ .hackapp 꾸러미: 묶기(pack)·검증하며 풀기(unpack)·선언 요약(preview, 실행 안 함). Platform.exportApp/previewBundle/installBundle이 쓴다
 modules/prepare/         ─ CLI 자동 설치(공식 설치 스크립트, 설치기에 기존 PATH를 안 보여 줌)
-modules/build/           ─ 제작: gate(검증 게이트)·progress(진행 기록)·inbox(에이전트↔HackMac 파일 통로)·evaluate(별도 역할 평가)·builder(스레드별 제작)·agent(지시·격리 설정)
-resources/agent/         ─ 제작 에이전트 지시(builder.md)·유지보수 팀 지시(maintainer.md)·능력 목록(capabilities.md). 능력을 추가하면 capabilities.md도 고친다(평가와 제작이 이 글을 본다)
+modules/build/           ─ 제작: gate(검증 게이트, 서비스 기준 S2·S5·S7 포함)·progress(진행 기록)·inbox(에이전트↔HackMac 파일 통로)·evaluate(별도 역할 평가)·builder(스레드별 제작, handoff)·agent(지시·격리 설정)
+                           pipeline(전문 담당 오케스트레이터: 채점→설계→실험→개발→카피→시험→[게이트→감사]→보완 최대 3번→설치)·roles(역할 정의·프롬프트)·rubric(일하기 전 채점표)·audit(다른 회사 엔진의 목표 달성 감사)·experiment(후보를 격리된 곳에서 돌려 재기)
+modules/knowledge/       ─ 배운 것 쌓기(lessons.jsonl): 보완으로 고친 함정·끝내 막힌 방법·사용자 취향. 모든 담당 프롬프트와 요구 정리 담당 지시에 붙는다
+modules/settings/values.ts ─ 앱 설정값 검증·기본값·time→cron(설정 화면·스크립트 env·스케줄이 같은 규칙)
+modules/secrets/         ─ 앱 비밀값(safeStorage 암호화, 못 쓰면 저장 거절)
+resources/agent/         ─ 요구 정리 담당 지시(builder.md: 질문으로 기준 캐내기 → req --accept → handoff)·유지보수 팀(maintainer.md)·능력 목록(capabilities.md)·roles/(전문 담당 지시와 공통 package-spec.md). 능력을 추가하면 capabilities.md도 고친다
 resources/bin/hackmac-build ─ 에이전트가 부르는 제작 명령. hackmac-popup-stub은 게이트가 시험을 돌릴 때 쓰는 가짜 팝업
 electron/studioHost.ts   ─ 계정·스레드·채팅·제작 IPC. 지금은 실행 서버와 같은 메인 프로세스에서 돈다(--role=studio 분리는 이 파일만 옮기면 됨)
 src/studio/              ─ 첫 실행 엔진 선택·로그인(Onboarding), 스레드 화면(왼쪽 단계 + 오른쪽 채팅)

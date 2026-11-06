@@ -71,6 +71,14 @@ export default function App() {
     else if (r.error) push(`내보내지 못했어요: ${r.error}`, 'error');
   };
 
+  // 앱 상세의 [수정하기] → 그 앱의 채팅이 다시 열린다
+  const handleEdit = async (service: ServiceMeta) => {
+    const r = await window.studio.editApp(service.id);
+    if (!r.ok) return push(`수정을 시작하지 못했어요: ${r.error}`, 'error');
+    void window.studio.threads().then(setThreads);
+    setView({ name: 'thread', threadId: r.threadId });
+  };
+
   const handleCreate = async () => {
     const meta = await window.studio.createThread('');
     void window.studio.threads().then(setThreads);
@@ -182,7 +190,7 @@ export default function App() {
     });
   }
 
-  const building = threads.filter((t) => !t.meta.appId);
+  const building = threads.filter((t) => !t.meta.appId || t.editing);
   const engine = accounts.engine;
 
   return frame({
@@ -219,7 +227,7 @@ export default function App() {
         {showAccounts && <AccountsDialog accounts={accounts} onAccounts={setAccounts} onClose={() => setShowAccounts(false)} />}
         {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
         {isDetail ? (
-          <ServiceDetail service={selected} onToggle={handleToggle} onExport={handleExport} />
+          <ServiceDetail service={selected} onToggle={handleToggle} onExport={handleExport} onEdit={(x) => void handleEdit(x)} />
         ) : (
           <>
             <header className="app-header">
@@ -236,7 +244,7 @@ export default function App() {
                     <button key={t.meta.id} className="thread-card" onClick={() => setView({ name: 'thread', threadId: t.meta.id })}>
                       <span className="thread-card-title">{t.meta.title}</span>
                       <span className="thread-card-sub">
-                        {t.busy ? '답을 쓰는 중' : '요구 정리'} · {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
+                        {t.building ? '전문 담당들이 만드는 중' : t.busy ? '답을 쓰는 중' : t.editing ? '고치는 중' : '요구 정리'} · {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
                       </span>
                     </button>
                   ))}

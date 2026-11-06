@@ -12,6 +12,7 @@ const HELP = `사용법: "$HACKMAC_BUILD" <명령> ...
   step <1-5> [지금 하는 일]      단계 바꾸기: 1 요구 정리 · 2 가능성 평가 · 3 개발 · 4 자체 검증 · 5 사용자 확인
   now <지금 하는 일>             "지금" 줄 한 줄(쉬운 말)
   req <R번호> <요구사항>          요구사항 추가/고치기. 자동으로 시험할 수 없으면 --manual <이유>
+                                 사용자에게서 캐낸 합격 기준은 --accept <기준> (여러 번 가능)
   req-remove <R번호>             요구사항 빼기
   ask <부탁할 일>                사용자가 해야 할 일(권한 승인 등). 확인 필요로 표시된다
   ask-done                       부탁이 끝났음
@@ -19,6 +20,9 @@ const HELP = `사용법: "$HACKMAC_BUILD" <명령> ...
 
 HackMac에 부탁하기(끝날 때까지 기다린다)
   evaluate                       요구사항으로 가능성 평가(다른 역할이 판정한다)
+  handoff                        요구사항을 확정해 전문 담당들(채점·설계·개발·카피·시험·감사)에게 넘긴다. 바로 돌아온다
+  cancel                         넘긴 제작을 멈춘다(요구가 바뀌었을 때)
+  learn <취향 한 문장>            사용자가 말한 일반적인 취향을 남긴다(다음 제작부터 모든 담당이 본다)
   verify                         ./app 패키지 검증(선언·이식성·문법·시험)
   submit                         검증을 통과하면 사용자의 HackMac에 설치
   status                         지금 진행 기록 요약`;
@@ -43,20 +47,22 @@ const flag = (name, list) => {
 const rest = (list, from) => list.slice(from).filter((x, i, a) => !x.startsWith('--') && !(i > 0 && a[i - 1].startsWith('--'))).join(' ');
 
 let request;
-const TIMEOUT = { event: 15_000, status: 15_000, evaluate: 600_000, verify: 600_000, submit: 600_000 };
+const TIMEOUT = { event: 15_000, status: 15_000, evaluate: 600_000, verify: 600_000, submit: 900_000, handoff: 15_000, cancel: 15_000 };
 switch (cmd) {
   case 'step': request = { cmd: 'event', args: { event: { type: 'step', step: Number(args[1]), now: args.slice(2).join(' ') || undefined } } }; break;
   case 'now': request = { cmd: 'event', args: { event: { type: 'now', text: args.slice(1).join(' ') } } }; break;
   case 'req': {
     const manual = flag('--manual', args);
-    request = { cmd: 'event', args: { event: { type: 'req', id: args[1], text: rest(args, 2), ...(manual.length ? { manual: manual[0] } : {}) } } };
+    const accept = flag('--accept', args);
+    request = { cmd: 'event', args: { event: { type: 'req', id: args[1], text: rest(args, 2), ...(manual.length ? { manual: manual[0] } : {}), ...(accept.length ? { accept } : {}) } } };
     break;
   }
   case 'req-remove': request = { cmd: 'event', args: { event: { type: 'req-remove', id: args[1] } } }; break;
   case 'ask': request = { cmd: 'event', args: { event: { type: 'ask', text: args.slice(1).join(' ') } } }; break;
   case 'ask-done': request = { cmd: 'event', args: { event: { type: 'ask-done' } } }; break;
   case 'fail': request = { cmd: 'event', args: { event: { type: 'fail', failure: flag('--type', args)[0], needed: flag('--needed', args)[0], evidence: flag('--evidence', args) } } }; break;
-  case 'evaluate': case 'verify': case 'submit': case 'status': request = { cmd, args: {} }; break;
+  case 'learn': request = { cmd: 'learn', args: { text: args.slice(1).join(' ') } }; break;
+  case 'evaluate': case 'verify': case 'submit': case 'status': case 'handoff': case 'cancel': request = { cmd, args: {} }; break;
   default:
     console.error(`hackmac-build: 모르는 명령 '${cmd}'\n\n${HELP}`);
     process.exit(2);

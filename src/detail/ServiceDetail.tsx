@@ -7,9 +7,10 @@ interface Props {
   service: ServiceMeta;
   onToggle: (service: ServiceMeta) => void;
   onExport: (service: ServiceMeta) => void;
+  onEdit: (service: ServiceMeta) => void;
 }
 
-export function ServiceDetail({ service, onToggle, onExport }: Props) {
+export function ServiceDetail({ service, onToggle, onExport, onEdit }: Props) {
   const [maint, setMaint] = useState<MaintenanceView | null>(null);
   const [maintMsg, setMaintMsg] = useState<string | null>(null);
   const refresh = useCallback(() => void window.playbook.maintenance(service.id).then(setMaint), [service.id]);
@@ -31,6 +32,9 @@ export function ServiceDetail({ service, onToggle, onExport }: Props) {
           <p className="detail-tagline">{service.tagline}</p>
         </div>
         <div className="detail-actions">
+          <button className="header-button edit-app-button" onClick={() => onEdit(service)}>
+            수정하기
+          </button>
           <button className="header-button export-app-button" onClick={() => onExport(service)}>
             내보내기
           </button>

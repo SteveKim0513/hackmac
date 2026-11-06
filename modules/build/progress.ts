@@ -5,6 +5,8 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import type { AuditItem } from './audit.ts';
+import type { RoleId } from './roles.ts';
 
 export const STEPS = ['요구 정리', '가능성 평가', '개발', '자체 검증', '사용자 확인', '완료'] as const;
 export type FailureType = 'macos' | 'capability' | 'external' | 'unknown';
@@ -19,7 +21,8 @@ export const FAILURE_LABEL: Record<FailureType, string> = {
 export type AgentEvent =
   | { type: 'step'; step: number; now?: string }
   | { type: 'now'; text: string }
-  | { type: 'req'; id: string; text: string; manual?: string }
+  /** accept: 사용자에게서 캐낸 합격 기준(이렇게 되면 된 것이다). 요구 정리 담당이 질문으로 뽑아 글로 고정한다 */
+  | { type: 'req'; id: string; text: string; manual?: string; accept?: string[] }
   | { type: 'req-remove'; id: string }
   | { type: 'ask'; text: string }
   | { type: 'ask-done' }
@@ -28,9 +31,22 @@ export type AgentEvent =
 
 export interface Verdict { kind: 'possible' | 'conditional' | 'impossible'; summary: string; conditions: string[]; reasons: string[]; by: string }
 
+/** 채점표 한 줄: 개발 전에 다른 역할이 쓴 합격 기준. auto면 시험으로, manual이면 사용자가 확인한다 */
+export interface RubricItem { id: string; req: string; criterion: string; how: 'auto' | 'manual' }
+/** 후보 실험 결과(설계가 낸 후보를 격리된 곳에서 돌려 잰 것) */
+export interface ExperimentResult { question: string; criterion: string; winner: string | null; runs: { name: string; ok: boolean; ms: number; note: string }[] }
+
 /** HackMac이 직접 내는 사건 */
 export type SystemEvent =
   | { type: 'verdict'; verdict: Verdict }
+  | { type: 'rubric'; items: RubricItem[]; by: string }
+  | { type: 'experiment'; result: ExperimentResult }
+  /** 전문 담당 하나가 일을 시작했다(round 0 = 처음, 1~ = 보완) */
+  | { type: 'role'; role: RoleId; label: string; round: number }
+  | { type: 'pipeline'; status: 'start' | 'fail' | 'done' | 'cancel'; reason?: string }
+  | { type: 'audit'; ok: boolean; by: string; items: AuditItem[] }
+  /** 설치된 앱을 고치기 시작했다(앱 상세의 [수정하기]). 진행을 처음부터 다시 하되 요구사항은 그대로 둔다 */
+  | { type: 'edit-start'; appId: string; version: number }
   | { type: 'gate'; ok: boolean; requirements: Record<string, string>; summary: string }
   | { type: 'installed'; appId: string; version: number };
 
@@ -40,17 +56,28 @@ export type ReqStatus = 'todo' | 'passed' | 'failed' | 'missing' | 'manual';
 export interface BuildState {
   step: number;
   now: string | null;
-  requirements: { id: string; text: string; manual: string | null; status: ReqStatus }[];
+  requirements: { id: string; text: string; manual: string | null; accept: string[]; status: ReqStatus }[];
   ask: string | null;
   verdict: Verdict | null;
   failures: { failure: FailureType; needed: string; evidence: string[]; counted: boolean; at: string | null }[];
   gate: { ok: boolean; summary: string; at: string | null } | null;
   installed: { appId: string; version: number } | null;
+  rubric: { items: RubricItem[]; by: string } | null;
+  experiments: ExperimentResult[];
+  /** 지금 일하는 전문 담당 */
+  role: { id: RoleId; label: string; round: number } | null;
+  pipeline: { status: 'running' | 'failed' | 'done' | 'cancelled'; reason: string | null } | null;
+  audit: { ok: boolean; by: string; items: AuditItem[]; at: string | null } | null;
+  /** 고치는 중인 설치된 앱 */
+  edit: { appId: string; version: number } | null;
   /** 자세한 기록(접어서 보인다) */
   log: { at: string | null; text: string }[];
 }
 
-export const EMPTY_STATE: BuildState = { step: 1, now: null, requirements: [], ask: null, verdict: null, failures: [], gate: null, installed: null, log: [] };
+export const EMPTY_STATE: BuildState = {
+  step: 1, now: null, requirements: [], ask: null, verdict: null, failures: [], gate: null, installed: null,
+  rubric: null, experiments: [], role: null, pipeline: null, audit: null, edit: null, log: [],
+};
 
 const REQ_ID = /^R[1-9][0-9]{0,2}$/;
 const str = (v: unknown, max = 500): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -78,7 +105,8 @@ export const validateAgentEvent = (raw: unknown): { ok: true; event: AgentEvent 
       if (!text) return { ok: false, error: '요구사항 내용이 비었음' };
       const manual = o.manual === undefined ? null : str(o.manual, 300);
       if (o.manual !== undefined && !manual) return { ok: false, error: '--manual에는 자동으로 시험할 수 없는 이유를 적는다' };
-      return { ok: true, event: { type: 'req', id, text, ...(manual ? { manual } : {}) } };
+      const accept = Array.isArray(o.accept) ? o.accept.map((a) => str(a, 300)).filter((a): a is string => a !== null).slice(0, 8) : [];
+      return { ok: true, event: { type: 'req', id, text, ...(manual ? { manual } : {}), ...(accept.length ? { accept } : {}) } };
     }
     case 'req-remove': {
       const id = str(o.id, 5);
@@ -118,7 +146,7 @@ export const reduce = (events: BuildEvent[]): BuildState => {
         break;
       case 'req': {
         const existing = s.requirements.find((r) => r.id === e.id);
-        const next = { id: e.id, text: e.text, manual: e.manual ?? null, status: (e.manual ? 'manual' : 'todo') as ReqStatus };
+        const next = { id: e.id, text: e.text, manual: e.manual ?? null, accept: e.accept ?? [], status: (e.manual ? 'manual' : 'todo') as ReqStatus };
         if (existing) Object.assign(existing, next);
         else s.requirements.push(next);
         s.requirements.sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
@@ -150,8 +178,36 @@ export const reduce = (events: BuildEvent[]): BuildState => {
         }
         log(e, e.summary.split('\n')[0]);
         break;
+      case 'rubric':
+        s.rubric = { items: e.items, by: e.by };
+        log(e, `채점표: ${e.items.length}개 기준(${e.by})`);
+        break;
+      case 'experiment':
+        s.experiments.push(e.result);
+        log(e, `실험: ${e.result.question} → ${e.result.winner ?? '통과한 후보 없음'}`);
+        break;
+      case 'role':
+        s.role = { id: e.role, label: e.label, round: e.round };
+        log(e, `${e.label}${e.round ? ` (${e.round}번째 보완)` : ''}`);
+        break;
+      case 'pipeline':
+        s.pipeline = { status: e.status === 'start' ? 'running' : e.status === 'fail' ? 'failed' : e.status === 'cancel' ? 'cancelled' : 'done', reason: e.reason ?? null };
+        if (e.status !== 'start') s.role = null;
+        log(e, e.status === 'start' ? '전문 담당들에게 넘김' : e.status === 'done' ? '제작 끝' : e.status === 'cancel' ? '제작을 멈춤' : `제작 실패: ${e.reason ?? ''}`);
+        break;
+      case 'audit':
+        s.audit = { ok: e.ok, by: e.by, items: e.items, at: e.at ?? null };
+        log(e, `목표 확인: ${e.items.filter((x) => x.met).length}/${e.items.length} 충족(${e.by})`);
+        break;
+      case 'edit-start':
+        Object.assign(s, { step: 1, now: null, ask: null, verdict: null, gate: null, installed: null, rubric: null, experiments: [], role: null, pipeline: null, audit: null });
+        s.edit = { appId: e.appId, version: e.version };
+        for (const r of s.requirements) r.status = r.manual ? 'manual' : 'todo';
+        log(e, `수정 시작: ${e.appId} (지금 ${e.version}번째 버전)`);
+        break;
       case 'installed':
         s.installed = { appId: e.appId, version: e.version };
+        s.edit = null;
         s.step = 6;
         s.ask = null;
         s.now = null;

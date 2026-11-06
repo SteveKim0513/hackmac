@@ -2,14 +2,18 @@
  * 스레드 하나의 제작 진행을 맡는다: 받은편지함의 요청을 처리하고, 진행 기록을 남기고, 평가·검증·설치를 HackMac 코드로 한다.
  *   - 앱 패키지는 <work>/app 한 곳(에이전트가 만든다)
  *   - 진행 기록은 스레드 폴더(작업 폴더 밖)에 둔다 — 에이전트가 기록을 지어낼 수 없게
- *   - submit: 평가가 끝났고 불가능이 아니며, 게이트를 통과해야 설치한다. 설치는 패키지를 복사해 넣는다(작업 폴더는 계속 고칠 수 있다)
+ *   - handoff(build): 요구사항이 확정되고 평가가 불가능이 아니면 전문 담당 파이프라인(pipeline.ts)을 돌린다. 설치는 파이프라인이
+ *     검증 게이트와 감사를 다 통과했을 때만 한다. 끝나면 onPipelineEnd로 결과 글을 요구 정리 담당에게 돌려준다
+ *   - submit(fix): 유지보수 팀이 고친 것을 게이트로 확인하고 보관 대기에 넣는다. build 모드에서는 쓰지 않는다(감사를 건너뛰는 길이 되므로)
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { formatReport, runGate, type GateOptions } from './gate.ts';
 import { evaluate, formatVerdict, type EvaluateInput } from './evaluate.ts';
 import { BuildInbox, type InboxRequest, type InboxResponse } from './inbox.ts';
-import { ProgressLog, STEPS, validateAgentEvent, type BuildState, type SystemEvent } from './progress.ts';
+import { outcomeText, runPipeline, type PipelineOutcome } from './pipeline.ts';
+import { ProgressLog, STEPS, validateAgentEvent, type AgentEvent, type BuildState, type SystemEvent } from './progress.ts';
+import type { RoleId } from './roles.ts';
 
 export interface BuilderDeps {
   /**
@@ -27,12 +31,21 @@ export interface BuilderDeps {
   installedVersion: (appId: string) => string | null;
   install: (pkgDir: string) => { ok: true; id: string; version: number } | { ok: false; errors: string[] };
   onState: (s: BuildState) => void;
+  /** 전문 담당에게 일을 시킨다(build 모드의 handoff에 필요). 없으면 handoff를 못 한다 */
+  runRole?: (role: RoleId, prompt: string, signal: AbortSignal) => Promise<string>;
+  roleBy?: (role: RoleId) => string;
+  /** 배운 것(modules/knowledge): 담당 프롬프트에 붙일 것과 남기기 */
+  lessons?: () => string[];
+  learn?: (kind: 'pitfall' | 'preference', text: string) => void;
+  /** 파이프라인이 끝났다. text: 요구 정리 담당에게 줄 결과 글 */
+  onPipelineEnd?: (o: PipelineOutcome, text: string) => void;
 }
 
 export class Builder {
   readonly progress: ProgressLog;
   readonly inbox: BuildInbox;
   readonly pkgDir: string;
+  private running: AbortController | null = null;
 
   constructor(private readonly d: BuilderDeps) {
     this.progress = new ProgressLog(d.progressFile);
@@ -44,7 +57,7 @@ export class Builder {
     return this.progress.state();
   }
 
-  private record(e: SystemEvent): void {
+  private record(e: SystemEvent | AgentEvent): void {
     this.progress.append(e);
     this.d.onState(this.state());
   }
@@ -66,6 +79,16 @@ export class Builder {
         return this.verify();
       case 'submit':
         return this.submit();
+      case 'handoff':
+        return this.handoff();
+      case 'cancel':
+        return this.cancel();
+      case 'learn': {
+        const text = typeof req.args.text === 'string' ? req.args.text.trim() : '';
+        if (!this.d.learn || text.length < 8) return { ok: false, text: '남길 취향을 한 문장으로 적는다' };
+        this.d.learn('preference', text);
+        return { ok: true, text: '기억했다(다음 제작부터 모든 담당이 본다)' };
+      }
       default:
         return { ok: false, text: `모르는 명령: ${req.cmd}` };
     }
@@ -101,9 +124,67 @@ export class Builder {
     return { ok: report.ok, text: formatReport(report) };
   }
 
+  /** 파이프라인이 돌고 있나 */
+  get busy(): boolean {
+    return this.running !== null;
+  }
+
+  /** 설치된 앱을 고치기 시작한다(앱 상세의 [수정하기]). 요구사항은 그대로 두고 진행을 처음으로 */
+  startEdit(appId: string, version: number): void {
+    this.record({ type: 'edit-start', appId, version });
+  }
+
+  private handoff(): InboxResponse {
+    const s = this.state();
+    if (this.d.mode === 'fix') return { ok: false, text: '유지보수 팀은 handoff를 쓰지 않는다(직접 고치고 submit)' };
+    if (this.running) return { ok: false, text: '이미 전문 담당들이 만드는 중이다. 멈추려면 cancel' };
+    if (s.requirements.length === 0) return { ok: false, text: '요구사항이 없음 — req로 먼저 기록한다' };
+    if (!s.verdict) return { ok: false, text: '가능성 평가를 먼저 한다(evaluate)' };
+    if (s.verdict.kind === 'impossible') return { ok: false, text: '평가가 불가능으로 나왔다. 요구사항을 고쳐 다시 evaluate 하거나, 사용자에게 불가능을 알린다' };
+    if (!this.d.runRole) return { ok: false, text: '이 HackMac에는 전문 담당이 붙어 있지 않다' };
+    const ctl = new AbortController();
+    this.running = ctl;
+    const runRole = this.d.runRole;
+    void runPipeline(
+      {
+        workDir: this.d.workDir,
+        state: () => this.state(),
+        record: (e) => this.record(e),
+        runRole,
+        roleBy: this.d.roleBy ?? (() => 'HackMac'),
+        gate: () => this.gate(),
+        install: () => {
+          const r = this.d.install(this.pkgDir);
+          if (r.ok) this.record({ type: 'installed', appId: r.id, version: r.version });
+          return r;
+        },
+        lessons: this.d.lessons ?? (() => []),
+        learn: (text) => this.d.learn?.('pitfall', text),
+        popupStub: this.d.gate.popupStub,
+      },
+      ctl.signal,
+    )
+      .catch((err): PipelineOutcome => ({ ok: false, stage: '알 수 없음', reason: (err as Error).message, cancelled: false }))
+      .then((o) => {
+        this.running = null;
+        this.d.onPipelineEnd?.(o, outcomeText(o));
+      });
+    return {
+      ok: true,
+      text: '넘겼다. 이제 HackMac이 채점·설계·개발·카피·시험·감사 담당을 차례로 부른다(몇 분 걸린다). 너는 여기서 멈추고, 사용자에게 "만들기 시작했고 끝나면 알려 주겠다"고 한두 문장으로 말한다. 끝나면 [HackMac 제작 결과]가 너에게 온다.',
+    };
+  }
+
+  private cancel(): InboxResponse {
+    if (!this.running) return { ok: false, text: '돌고 있는 제작이 없다' };
+    this.running.abort();
+    return { ok: true, text: '멈추는 중이다' };
+  }
+
   private async submit(): Promise<InboxResponse> {
     const s = this.state();
     const fix = this.d.mode === 'fix';
+    if (!fix) return { ok: false, text: '제작은 submit이 아니라 handoff로 넘긴다(전문 담당들이 검증과 감사를 거쳐 설치한다)' };
     if (!fix && s.requirements.length === 0) return { ok: false, text: '요구사항이 없음 — req로 먼저 기록한다' };
     if (!fix && !s.verdict) return { ok: false, text: '가능성 평가를 먼저 한다(evaluate)' };
     if (!fix && s.verdict?.kind === 'impossible') return { ok: false, text: '평가가 불가능으로 나왔다. 요구사항을 고쳐 다시 evaluate 하거나, 사용자에게 불가능을 알린다' };
@@ -126,6 +207,7 @@ export class Builder {
   }
 
   stop(): void {
+    this.running?.abort();
     this.inbox.stop();
   }
 }

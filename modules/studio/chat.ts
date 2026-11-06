@@ -26,6 +26,8 @@ export interface ChatDeps {
   engineFor: (vendor: Vendor, accountId: string) => EngineHandle | null;
   /** 기억(계획서 12.2)이 최신이면 새 세션에 넣을 글. null이면 평소처럼 세션을 이어 연다 */
   memoryContext?: (threadId: string) => string | null;
+  /** 엔진을 열 때마다 지시 뒤에 붙일 것(배운 것, 수정 중인 앱의 사정 등). null이면 없음 */
+  context?: (threadId: string) => string | null;
   /** 레시피(12.3)를 붙여넣은 첫 글이면 빈칸만 채우는 짧은 모드로 간다 */
   recipe?: { detect: (text: string) => boolean; instructions: string; title: (text: string) => string | null };
   /** 진행 중인 대화를 다른 계정으로 옮길 때 세션 기록을 복사한다(modules/account/session.ts) */
@@ -130,7 +132,8 @@ export class Chats {
   /** 지시문 뒤에 붙일 것: 레시피 모드 지시 + (최신이면) 기억 */
   private extras(threadId: string, recipe: boolean): { text: string; usedMemory: boolean } {
     const mem = this.d.memoryContext?.(threadId) ?? null;
-    return { text: [recipe && this.d.recipe ? this.d.recipe.instructions : '', mem ?? ''].filter(Boolean).join('\n\n'), usedMemory: mem !== null };
+    const ctx = this.d.context?.(threadId) ?? null;
+    return { text: [recipe && this.d.recipe ? this.d.recipe.instructions : '', ctx ?? '', mem ?? ''].filter(Boolean).join('\n\n'), usedMemory: mem !== null };
   }
 
   private async openOnce(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null, addendum: string): Promise<Conversation> {
@@ -243,6 +246,31 @@ export class Chats {
       this.d.onEvent(threadId, { kind: 'message', message: msg });
       this.d.onEvent(threadId, { kind: 'state', busy: false });
     }
+  }
+
+  /**
+   * HackMac이 요구 정리 담당에게 알릴 것(제작 결과 등)을 보낸다. 사용자가 쓴 글이 아니므로 사용자 말풍선으로 남기지 않는다 —
+   * 엔진의 답(사용자에게 하는 말)만 평소처럼 쌓인다. 엔진이 꺼져 있으면 이어 연다.
+   */
+  async relay(threadId: string, text: string): Promise<SendResult> {
+    const meta = this.d.threads.get(threadId);
+    if (!meta?.vendor) return { ok: false, reason: '대화를 시작하지 않은 스레드' };
+    const accountId = meta.account ?? this.d.activeAccount(meta.vendor);
+    const engine = this.d.engineFor(meta.vendor, accountId);
+    if (!engine) return { ok: false, reason: '그 계정이 로그인돼 있지 않아요' };
+    let conv = this.live.get(threadId);
+    if (!conv || !conv.alive) {
+      const x = this.extras(threadId, meta.recipe === true);
+      if (x.usedMemory) this.d.threads.update(threadId, { session: null });
+      try {
+        conv = await this.open(threadId, meta.vendor, engine, x.usedMemory ? null : meta.session, x.text);
+      } catch (err) {
+        return { ok: false, reason: `엔진을 열지 못했어요: ${(err as Error).message}` };
+      }
+    }
+    conv.send(text);
+    this.d.onEvent(threadId, { kind: 'state', busy: true });
+    return { ok: true };
   }
 
   async interrupt(threadId: string): Promise<void> {

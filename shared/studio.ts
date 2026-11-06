@@ -41,7 +41,7 @@ export interface AccountView extends VendorView {
 }
 /** vendors는 회사별로 "지금 쓰는 계정"의 상태, accounts는 모든 계정 */
 export interface AccountsView { vendors: Record<Vendor, VendorView>; accounts: AccountView[]; choice: EngineChoice; engine: Vendor | null }
-export interface ThreadView { meta: ThreadMeta; messages: Message[]; busy: boolean }
+export interface ThreadView { meta: ThreadMeta; messages: Message[]; busy: boolean; /** 설치된 앱을 고치는 중 */ editing?: boolean; /** 전문 담당들이 만드는 중 */ building?: boolean }
 
 export const MAX_ACCOUNTS_PER_VENDOR = 3;
 export const VENDOR_LABEL: Record<Vendor, string> = { claude: 'Claude', codex: 'ChatGPT' };

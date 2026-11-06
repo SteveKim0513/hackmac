@@ -79,6 +79,20 @@ for (const vendor of ['claude', 'codex'] as const) {
     await page.locator('.build-log summary').click();
     await expect(page.locator('.build-log')).toContainText('가능성 평가: possible');
     await expect(page.locator('.bubble-assistant').last()).toContainText('설치함: my.today', { timeout: 10_000 });
+    // 사용자에게서 캐낸 합격 기준이 요구사항 아래에 남는다
+    await expect(page.locator('.req-accept')).toContainText('날짜가 YYYY-MM-DD로 보인다');
+    // 만들기 전에 다른 역할이 정한 채점표, 그 표로 채점한 목표 확인, 직접 확인할 것을 나눠 보인다
+    const other = vendor === 'claude' ? 'Codex' : 'Claude';
+    await expect(page.locator('[data-rubric] summary')).toContainText(`합격 기준 2개 · 만들기 전에 ${other}가 먼저 정함`);
+    await expect(page.locator('[data-audit] strong')).toHaveText('목표 확인 7/7');
+    await expect(page.locator('[data-audit]')).toContainText(`${other}가 코드를 읽고 확인`);
+    await expect(page.locator('[data-audit-item="R1"]')).toContainText('scripts/show.sh가 date +%F로');
+    await expect(page.locator('[data-honest]')).toContainText('직접 확인할 것 1개');
+    await expect(page.locator('[data-manual-checks] li')).toHaveText(['단축키를 누르면 오늘 날짜가 알림으로 뜬다']);
+    // 전문 담당들이 차례로 일했다
+    await expect(page.locator('.build-log')).toContainText('채점 담당');
+    await expect(page.locator('.build-log')).toContainText('시험 담당');
+    await expect(page.locator('.build-log')).toContainText('목표 확인: 7/7 충족');
     await page.locator('.build-box.is-done button').click();
     await expect(page.locator('.detail-page h1')).toHaveText('오늘 날짜');
     await page.locator('.titlebar-back').click();

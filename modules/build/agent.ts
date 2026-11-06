@@ -36,3 +36,30 @@ export const agentOptions = (vendor: Vendor, cwd: string, p: AgentPaths): Partia
   vendor === 'claude'
     ? { allowedTools: CLAUDE_BUILD_TOOLS, extraArgs: ['--settings', JSON.stringify(CLAUDE_SANDBOX_SETTINGS)], env: buildEnv(cwd, p) }
     : { env: buildEnv(cwd, p) };
+
+/**
+ * 전문 담당의 지시문: 역할 글 + (만드는 담당이면) 패키지 규칙과 능력 목록. 역할마다 필요한 것만 준다 —
+ * 감사·채점 담당에게 패키지 규칙 전문을 주지 않는 것은 "어떻게 만들지"가 아니라 "무엇이 되면 되는지"만 보게 하려는 것.
+ */
+export const roleInstructions = (
+  roleMd: string,
+  o: { packageSpec?: string; capabilities?: string; copyGuidePath?: string; docs?: AgentPaths['docs'] },
+): string =>
+  [
+    roleMd.replace('{COPY_GUIDE}', o.copyGuidePath ?? '(없음)'),
+    ...(o.packageSpec ? ['---', o.packageSpec] : []),
+    ...(o.capabilities ? ['---', o.capabilities] : []),
+    ...(o.docs?.length ? ['---', '## 참고 문서 (읽기 전용)', ...o.docs.map((d) => `- ${d.label}: ${d.path}`)] : []),
+  ].join('\n\n');
+
+/** 설치된 앱을 고치는 스레드에서 요구 정리 담당에게 붙는 사정(앱 상세의 [수정하기]) */
+export const editContext = (appId: string, version: number, reqCount: number): string =>
+  [
+    '## 지금 하는 일: 설치된 앱 고치기',
+    `이 스레드는 이미 설치된 앱(${appId}, 이 맥의 ${version}번째 버전)을 고치는 중이다. 작업 폴더의 ./app/ 에 지금 설치된 버전이 그대로 있다.`,
+    '- 사용자가 무엇을 바꾸고 싶은지 듣는다. 기준 캐내기를 그대로 한다(잘 된 모습, 없을 때·안 될 때, 바꾸고 싶을 값).',
+    reqCount > 0
+      ? `- 기존 요구사항 ${reqCount}개는 그대로 유효하다. 바뀌는 것은 같은 번호로 req를 다시 쓰고, 새 것은 다음 번호로 더한다. 빼기로 한 것만 req-remove.`
+      : '- 기록된 요구사항이 없다(작업실 밖에서 온 앱). 먼저 ./app/ 의 선언과 스크립트를 읽고 지금 하는 일을 R1, R2 …로 기록해 사용자에게 "지금 이 앱은 이렇게 동작해요"라고 확인받은 뒤, 바꿀 것을 더한다.',
+    '- 확정되면 evaluate → handoff. 전문 담당들이 버전을 올려 다시 설치한다(기존 요구사항도 모두 다시 확인한다).',
+  ].join('\n');

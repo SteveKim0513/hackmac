@@ -72,7 +72,7 @@ describe('runGate', () => {
 
   it('내 홈 절대경로·외부 도구·sudo는 portability', async () => {
     goodApp();
-    write('scripts/extra.sh', `#!/bin/zsh\n# 주석의 brew install은 괜찮다\ncat ${homedir()}/notes.txt\nbrew install jq\nx=$(python3 -c 1)\nsudo rm -rf /tmp/x\ncat /Users/someone/a\nls /Users/Shared\n`);
+    write('scripts/extra.sh', `#!/bin/zsh\n# 주석의 brew install은 괜찮다\ncat ${homedir()}/notes.txt\nbrew install jq\nx=$(python3 -c 1)\nsudo rm -rf /tmp/x\ncat /Users/someone/a\nls /Users/Shared\necho "판단: 끝"\n`);
     const r = await runGate(pkg, opts());
     expect(failed(r)).toEqual(['portability']);
     const p = r.checks.find((c) => c.id === 'portability')!.problems.join('\n');
@@ -88,7 +88,8 @@ describe('runGate', () => {
   it('선언 안 한 자동화·주소는 declared, 와일드카드는 허용', async () => {
     goodApp();
     write('manifest.json', JSON.stringify(manifest({ permissions: { network: ['*.example.com'], automation: ['Calendar'], accessibility: false, fullDiskAccess: false } })));
-    write('scripts/x.sh', '#!/bin/zsh\nosascript -e \'tell application "Calendar" to get name\'\nosascript -e \'tell application "Reminders" to get name\'\ncurl -s https://api.example.com/q\ncurl -s https://evil.test/q\n');
+    write('scripts/x.sh', '#!/bin/zsh\nosascript -e \'tell application "Calendar" to get name\'\nosascript -e \'tell application "Reminders" to get name\'\ncurl -s https://api.example.com/q\ncurl -s https://evil.test/q\necho "판단: 끝"\n');
+    write('checks/E1-offline.sh', '#!/bin/zsh\nexit 0\n');
     const r = await runGate(pkg, opts());
     expect(failed(r)).toEqual(['declared']);
     expect(r.checks.find((c) => c.id === 'declared')!.problems).toEqual(['scripts/x.sh:3: "Reminders" 자동화를 permissions.automation에 적지 않음', 'scripts/x.sh:5: evil.test 접속을 permissions.network에 적지 않음']);
@@ -152,5 +153,49 @@ describe('runGate', () => {
     goodApp();
     symlinkSync('/etc/hosts', join(pkg, 'scripts', 'link'));
     expect(failed(await runGate(pkg, opts()))).toEqual(['files']);
+  });
+  describe('서비스 기준(baseline)', () => {
+    const baselineOf = async () => (await runGate(pkg, opts())).checks.find((c) => c.id === 'baseline')!;
+
+    it('잘 만든 앱은 통과', async () => {
+      goodApp();
+      expect((await baselineOf()).ok).toBe(true);
+    });
+
+    it('S2: 선언만 하고 안 읽는 설정, 읽는데 선언 안 한 설정을 잡는다', async () => {
+      goodApp();
+      write('manifest.json', JSON.stringify(manifest({ settings: [{ key: 'greeting', label: '인사말', type: 'string', default: '안녕' }, { key: 'unused', label: '안 쓰는 값', type: 'number', default: 1 }] })));
+      write('scripts/more.sh', '#!/bin/zsh\necho "판단: $HACKMAC_SETTING_SECRET_HOUR"\n');
+      const b = await baselineOf();
+      expect(b.ok).toBe(false);
+      expect(b.problems.join('\n')).toContain("설정 'unused'(안 쓰는 값)을 읽는 스크립트가 없음");
+      expect(b.problems.join('\n')).toContain('$HACKMAC_SETTING_SECRET_HOUR를 읽지만 settings에 선언이 없음');
+    });
+
+    it('S2: 스케줄이 시각 설정을 가리키면 스크립트가 직접 안 읽어도 쓰는 것이다', async () => {
+      goodApp();
+      write('manifest.json', JSON.stringify(manifest({
+        settings: [{ key: 'greeting', label: '인사말', type: 'string', default: '안녕' }, { key: 'at', label: '알림 시각', type: 'time', default: '09:00' }],
+        triggers: [{ kind: 'hotkey', script: 'scripts/hi.sh', key: 'hi', name: '인사하기', description: 'd' }, { kind: 'schedule', script: 'scripts/hi.sh', name: '매일', atSetting: 'at' }],
+      })));
+      expect((await baselineOf()).ok).toBe(true);
+    });
+
+    it('S5: 외부 접속·자동화가 있으면 실패 경로 시험(checks/E*)이 있어야 한다', async () => {
+      goodApp();
+      write('manifest.json', JSON.stringify(manifest({ permissions: { network: ['api.example.com'], automation: [], accessibility: false, fullDiskAccess: false } })));
+      write('scripts/net.sh', '#!/bin/zsh\ncurl -s https://api.example.com/q || echo "판단: 접속 실패"\n');
+      expect((await baselineOf()).problems.join('\n')).toContain('S5');
+      write('checks/E1-offline.sh', '#!/bin/zsh\nexit 0\n');
+      expect((await baselineOf()).ok).toBe(true);
+    });
+
+    it('S7: 기록 줄(echo·log)이 없는 스크립트를 잡는다. 주석의 echo는 세지 않는다', async () => {
+      goodApp();
+      write('scripts/quiet.sh', '#!/bin/zsh\n# echo 이건 주석\ndate > /dev/null\n');
+      expect((await baselineOf()).problems).toEqual(['S7: scripts/quiet.sh에 기록 줄이 없음 → 판단 지점마다 echo(AppleScript는 log)로 남긴다']);
+      write('scripts/quiet.sh', '#!/bin/zsh\nosascript - <<EOF\nlog "판단: 시작"\nEOF\n');
+      expect((await baselineOf()).ok).toBe(true);
+    });
   });
 });

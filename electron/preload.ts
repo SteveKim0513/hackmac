@@ -61,6 +61,8 @@ const studioApi = {
   openUrl: (url: string): Promise<void> => ipcRenderer.invoke('login:openUrl', url),
   threads: (): Promise<ThreadView[]> => ipcRenderer.invoke('threads:list'),
   createThread: (title: string): Promise<ThreadMeta> => ipcRenderer.invoke('threads:create', title),
+  /** 앱 상세의 [수정하기]: 그 앱의 스레드를 수정 모드로 연다 */
+  editApp: (appId: string): Promise<{ ok: true; threadId: string } | { ok: false; error: string }> => ipcRenderer.invoke('apps:edit', appId),
   thread: (id: string): Promise<ThreadView | null> => ipcRenderer.invoke('threads:get', id),
   send: (id: string, text: string): Promise<SendResult> => ipcRenderer.invoke('chat:send', id, text),
   interrupt: (id: string): Promise<void> => ipcRenderer.invoke('chat:interrupt', id),

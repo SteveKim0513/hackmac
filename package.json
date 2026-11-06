@@ -66,6 +66,10 @@
       {
         "from": "docs/apple-app-data-access-guide.md",
         "to": "agent/apple-app-data-access-guide.md"
+      },
+      {
+        "from": "docs/service-copy-guide.md",
+        "to": "agent/service-copy-guide.md"
       }
     ],
     "mac": {

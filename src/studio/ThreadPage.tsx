@@ -103,6 +103,8 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
 
   const elapsed = startedAt.current ? Math.floor((Date.now() - startedAt.current) / 1000) : 0;
 
+  const manualRubric = build?.rubric?.items.filter((x) => x.how === 'manual') ?? [];
+
   return (
     <div className="thread-page">
       {recipe && <RecipeDialog recipe={recipe} onClose={() => setRecipe(null)} />}
@@ -158,6 +160,19 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
           <div className="build-box is-done">
             <strong>내 앱에 들어갔어요</strong>
             <p>홈의 내 앱에서 켜면 바로 동작해요.</p>
+            {build.audit && (
+              <p className="honest-line" data-honest>
+                확인한 것 {build.audit.items.filter((x) => x.met).length}개(다른 AI가 코드에서 근거를 찾음)
+                {manualRubric.length > 0 ? ` · 직접 확인할 것 ${manualRubric.length}개` : ''}
+              </p>
+            )}
+            {manualRubric.length > 0 && (
+              <ul className="honest-manual" data-manual-checks>
+                {manualRubric.map((m) => (
+                  <li key={m.id}>{m.criterion}</li>
+                ))}
+              </ul>
+            )}
             <button className="toggle-button is-active" onClick={() => onOpenApp(build.installed!.appId)}>
               앱 보러 가기
             </button>
@@ -168,6 +183,19 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
             {build?.now ?? (busy ? `답을 쓰는 중 · ${elapsed}초` : messages.length ? '답을 기다리고 있어요' : '만들고 싶은 것을 말해 주세요')}
             {busy && build?.now ? ` · ${elapsed}초` : ''}
           </p>
+        )}
+        {build?.pipeline?.status === 'running' && build.role && (
+          <p className="thread-role" data-role={build.role.id}>
+            <span className="thread-now-label">담당</span>
+            {build.role.label}
+            {build.role.round ? ` · ${build.role.round}번째 보완` : ''}
+          </p>
+        )}
+        {build?.pipeline?.status === 'failed' && (
+          <div className="build-box is-fail" data-pipeline-failed>
+            <strong>만들지 못했어요</strong>
+            <p>{build.pipeline.reason}</p>
+          </div>
         )}
         {build?.ask && (
           <div className="build-box is-ask">
@@ -183,6 +211,13 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
                 <span className="req-mark">{REQ_LABEL[r.status].mark}</span>
                 <span className="req-text">{r.text}</span>
                 <span className="req-status">{REQ_LABEL[r.status].text}</span>
+                {r.accept.length > 0 && (
+                  <ul className="req-accept">
+                    {r.accept.map((a) => (
+                      <li key={a}>{a}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>
@@ -198,6 +233,58 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
                 ))}
               </ul>
             )}
+          </div>
+        )}
+        {build?.rubric && (
+          <details className="build-box rubric-box" data-rubric open={!build.audit}>
+            <summary>
+              <strong>합격 기준 {build.rubric.items.length}개</strong>
+              <span className="muted"> · 만들기 전에 {build.rubric.by}가 먼저 정함</span>
+            </summary>
+            <ul>
+              {build.rubric.items.map((x) => {
+                const goal = build.audit?.items.find((a) => a.id === x.req);
+                return (
+                  <li key={x.id} data-rubric-item={x.id}>
+                    <span className="rubric-how">{x.how === 'auto' ? '시험' : '직접'}</span>
+                    {x.criterion}
+                    {goal && <span className={`rubric-mark ${goal.met ? 'is-met' : 'is-unmet'}`}>{goal.met ? ' ✓' : ' ✗'}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        )}
+        {build?.experiments && build.experiments.length > 0 && (
+          <div className="build-box" data-experiments>
+            <strong>후보를 실제로 돌려 고른 것</strong>
+            <ul>
+              {build.experiments.map((x) => (
+                <li key={x.question}>
+                  {x.question}: {x.winner ? `${x.winner}이(가) 이김` : '합격한 후보 없음'}
+                  <span className="muted"> ({x.runs.map((r) => `${r.name} ${r.ok ? `${r.ms}ms` : '불합격'}`).join(' · ')})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {build?.audit && (
+          <div className={`build-box audit-box ${build.audit.ok ? 'is-met' : 'is-unmet'}`} data-audit>
+            <strong>
+              목표 확인 {build.audit.items.filter((x) => x.met).length}/{build.audit.items.length}
+            </strong>
+            <span className="muted"> · {build.audit.by}가 코드를 읽고 확인</span>
+            <ul>
+              {build.audit.items.map((x) => (
+                <li key={x.id} className={x.met ? 'is-met' : 'is-unmet'} data-audit-item={x.id} title={x.met ? x.evidence : x.gap}>
+                  <span className="audit-mark">{x.met ? '✓' : '✗'}</span>
+                  <span>
+                    {x.kind === 'goal' ? x.label : `서비스 기준 · ${x.label}`}
+                    <span className="audit-why">{x.met ? x.evidence : x.gap}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {build && build.log.length > 0 && (

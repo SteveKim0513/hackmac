@@ -814,3 +814,83 @@
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* ── 전문 담당 파이프라인: 담당·합격 기준·목표 확인 ── */
+.thread-role {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.build-box.is-fail strong {
+  color: var(--danger);
+}
+
+.req-accept {
+  grid-column: 2 / -1;
+  margin: 2px 0 0;
+  padding-left: 16px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.rubric-box summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.rubric-box ul,
+.audit-box ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.rubric-box li,
+.audit-box li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.rubric-how {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.rubric-mark.is-met,
+.audit-box li.is-met .audit-mark {
+  color: var(--ok);
+}
+
+.rubric-mark.is-unmet,
+.audit-box li.is-unmet .audit-mark {
+  color: var(--danger);
+}
+
+.audit-mark {
+  flex: none;
+  font-weight: 700;
+}
+
+.audit-why {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.honest-line {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.honest-manual {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+}

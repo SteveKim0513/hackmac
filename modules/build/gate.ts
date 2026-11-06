@@ -9,6 +9,8 @@
  *   portability  내 홈 절대경로·외부 도구(brew·npm·python…)·sudo 없음
  *   declared     스크립트가 자동화하는 앱과 접속하는 주소가 선언(permissions)에 있다
  *   popup        osascript 다이얼로그(display dialog / choose from list)를 직접 그리지 않는다
+ *   baseline     서비스 기준 중 코드가 볼 수 있는 것(docs/service-baseline.md): S2 선언한 설정을 스크립트가 읽고 읽는 설정은 선언돼 있다,
+ *                S5 외부 접속·자동화가 있으면 실패 경로 시험(checks/E*-*.sh)이 있다, S7 스크립트마다 기록 줄(echo·log)이 있다
  *   syntax       zsh -n
  *   version      이미 설치된 앱이면 버전 번호가 올라갔다
  *   checks       빈 가짜 홈에 설치한 뒤 checks/*.sh를 기본 PATH만으로 실제로 돌린다(요구사항별)
@@ -58,6 +60,10 @@ const URL_RE = /https?:\/\/([a-z0-9.-]+)/gi;
 const DIALOG_RE = /\b(display\s+dialog|choose\s+from\s+list|display\s+alert|choose\s+file)\b/i;
 const USER_PATH_RE = /\/Users\/(?!Shared\b)[A-Za-z0-9._-]+/;
 const REQ_FILE_RE = /^(R\d+)[-_.]/;
+const ERR_FILE_RE = /^checks\/E\d*[-_.][^/]*\.sh$/;
+const ENV_REF_RE = /HACKMAC_(SETTING|SECRET)_([A-Z0-9_]+)/g;
+const LOG_LINE_RE = /(^|[\s;&|({`])(echo|print|printf|log)\s/;
+const envKeyOf = (k: string) => k.toUpperCase().replace(/-/g, '_');
 
 /** 주석 줄을 뺀 내용(셸 # 주석). 따옴표 안의 #까지는 따지지 않는다 — 놓치는 쪽이 아니라 덜 잡는 쪽으로 기운다 */
 const codeLines = (text: string): { n: number; line: string }[] =>
@@ -152,6 +158,32 @@ export async function runGate(pkgDir: string, o: GateOptions): Promise<GateRepor
   add('portability', '다른 맥에서도 도는가', port);
   add('declared', '선언한 권한', [...new Set(declared)]);
   add('popup', '팝업 규칙', popup);
+
+  // 서비스 기준(코드가 볼 수 있는 것)
+  const baseline: string[] = [];
+  if (m) {
+    const appScripts = scripts.filter((f) => f.startsWith('scripts/'));
+    const texts = appScripts.map((f) => { try { return { f, text: readFileSync(join(pkgDir, f), 'utf8') }; } catch { return { f, text: '' }; } });
+    const used = { SETTING: new Set<string>(), SECRET: new Set<string>() };
+    for (const { text } of texts) for (const mm of text.matchAll(ENV_REF_RE)) used[mm[1] as 'SETTING' | 'SECRET'].add(mm[2]);
+    const byTrigger = new Set(m.triggers.flatMap((t) => (t.kind === 'schedule' ? [t.atSetting, t.everyMinutesSetting].filter((x): x is string => !!x) : [])));
+    for (const d of m.settings) {
+      if (!used.SETTING.has(envKeyOf(d.key)) && !byTrigger.has(d.key)) baseline.push(`S2: 설정 '${d.key}'(${d.label})을 읽는 스크립트가 없음 → 스크립트가 $HACKMAC_SETTING_${envKeyOf(d.key)}를 쓰거나, 쓰지 않는 설정이면 뺀다`);
+    }
+    for (const d of m.secrets) if (!used.SECRET.has(envKeyOf(d.key))) baseline.push(`S2: 비밀값 '${d.key}'(${d.label})을 읽는 스크립트가 없음`);
+    const declaredSettings = new Set(m.settings.map((d) => envKeyOf(d.key)));
+    const declaredSecrets = new Set(m.secrets.map((d) => envKeyOf(d.key)));
+    for (const k of used.SETTING) if (!declaredSettings.has(k)) baseline.push(`S2: 스크립트가 $HACKMAC_SETTING_${k}를 읽지만 settings에 선언이 없음 → 선언해야 설정 화면에 나온다`);
+    for (const k of used.SECRET) if (!declaredSecrets.has(k)) baseline.push(`S2: 스크립트가 $HACKMAC_SECRET_${k}를 읽지만 secrets에 선언이 없음`);
+    if ((m.permissions.network.length > 0 || m.permissions.automation.length > 0) && !files.some((f) => ERR_FILE_RE.test(f))) {
+      baseline.push('S5: 인터넷 접속이나 다른 앱 자동화가 있는데 실패 경로 시험이 없음 → checks/E1-<이름>.sh로 접속 실패·빈 결과일 때 앱이 알리는지 시험한다');
+    }
+    for (const { f, text } of texts) {
+      if (!f.endsWith('.sh')) continue;
+      if (!codeLines(text).some(({ line }) => LOG_LINE_RE.test(line))) baseline.push(`S7: ${f}에 기록 줄이 없음 → 판단 지점마다 echo(AppleScript는 log)로 남긴다`);
+    }
+  }
+  add('baseline', '서비스 기준', baseline);
 
   // 문법
   const syntax: string[] = [];
