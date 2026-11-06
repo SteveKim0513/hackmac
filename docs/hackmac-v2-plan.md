@@ -410,12 +410,12 @@ HackMac이 늘 떠 있으므로 앱 오류를 감시하다가, 고칠 수 있는
 
 ## 14. 확인 필요 목록
 
-구현 전에 검증한다.
+구현 전에 검증한다. 1~4는 2026-11-06 문서 조사로 결정했고 실제 빌드로 확인할 스파이크만 남았다 — [hackmac-v2-research-2026-11-06.md](hackmac-v2-research-2026-11-06.md).
 
-1. **준비 모듈의 CLI 설치 방법.** claude/codex 공식 설치기, 관리자 권한 필요 여부, 설치 위치.
-2. **실행 서버 등록 방법.** SMAppService(앱 번들 안 plist, 로그인 항목에 "HackMac"으로 표시)와 `~/Library/LaunchAgents` 직접 쓰기(스튜디오 방식) 중 무엇을 쓸지.
-3. **창 없는 Electron이 launchd 아래에서** 트레이와 단축키까지 정상 동작하는지.
-4. **Codex를 대화 엔진으로 쓰는 방법.** 스튜디오에서 Codex는 리뷰어(`codex exec` 1회)로만 쓰여 가져올 코드가 없다.
+1. ~~준비 모듈의 CLI 설치 방법.~~ **[결정]** 공식 독립 설치 스크립트를 앱이 실행. sudo·Node 불필요. 남은 것: Codex 자동 업데이트 여부(모름 → 앱이 `codex update` 주기 호출).
+2. ~~실행 서버 등록 방법.~~ **[결정]** SMAppService `agentService` + 번들 안 plist(Electron 33 `setLoginItemSettings` 내장). 스파이크: KeepAlive 실동작, 로그인 항목 표시.
+3. ~~창 없는 Electron이 launchd 아래에서.~~ 공식 문서상 막는 것 없음. 스파이크: 서명 빌드로 실측.
+4. ~~Codex를 대화 엔진으로.~~ **[결정]** `codex app-server --listen stdio://`(JSON-RPC). 스파이크: 스키마 고정.
 5. **배포 약관.** 스튜디오도 "구독 약관(R19)"을 보류로 두고 있다. 공식 CLI를 수정 없이 띄우는 방식이 배포 제품에서 허용되는지 확인.
 6. **grill with docs 스킬의 위치.** 이 프로젝트에 없다. 다른 곳에 있으면 가져오고, 없으면 만든다.
 7. **준비 모듈이 설치할 런타임 목록.** Node는 Electron이 품고 있어 기본으로 쓸 수 있다. Python 등 그 밖의 런타임을 설치할지, 아니면 그 런타임이 필요한 능력을 만들지 않을지.
