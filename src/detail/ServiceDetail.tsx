@@ -4,12 +4,11 @@ import type { MaintenanceView } from '../../shared/studio';
 
 interface Props {
   service: ServiceMeta;
-  onBack: () => void;
   onToggle: (service: ServiceMeta) => void;
   onExport: (service: ServiceMeta) => void;
 }
 
-export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
+export function ServiceDetail({ service, onToggle, onExport }: Props) {
   const [maint, setMaint] = useState<MaintenanceView | null>(null);
   const [maintMsg, setMaintMsg] = useState<string | null>(null);
   const refresh = useCallback(() => void window.playbook.maintenance(service.id).then(setMaint), [service.id]);
@@ -24,10 +23,6 @@ export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
 
   return (
     <div className="detail-page" style={{ ['--accent' as string]: service.accentColor }}>
-      <button className="back-button" onClick={onBack}>
-        ← 스토어로
-      </button>
-
       <header className="detail-header">
         <div className="detail-icon">{service.icon}</div>
         <div className="detail-heading">

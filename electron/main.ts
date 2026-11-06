@@ -80,10 +80,10 @@ function createMainWindow() {
     minHeight: 520,
     title: 'HackMac',
     titleBarStyle: 'hiddenInset',
-    // macOS 기본 위치(대략 x:13~20, 버전마다 다름)에 맡기면 트래픽라이트와
-    // "HackMac" 제목 사이 간격이 OS 버전에 따라 들쭉날쭉해진다 — 직접 고정해
-    // src/theme.css의 .app-shell 왼쪽 여백(92px)과 정확히 맞춘다.
-    trafficLightPosition: { x: 20, y: 20 },
+    // macOS 기본 위치(버전마다 다름)에 맡기지 않고 직접 고정한다 —
+    // src/theme.css의 .titlebar(높이 52px, 왼쪽 여백 84px)와 짝이다:
+    // y:18이 실제 화면에서 툴바 버튼들과 세로 중심이 맞는 값이다(스크린샷으로 확인).
+    trafficLightPosition: { x: 20, y: 18 },
     // src/theme.css의 --bg(라이트 #fbfbfd/다크 #1c1c1e)와 맞춰 초기 로드시
     // 깜빡임 방지 — nativeTheme.themeSource는 whenReady 초입에서 이미
     // 저장된 사용자 설정으로 세팅해둔 뒤라 여기서 바로 현재 값을 읽을 수 있다.

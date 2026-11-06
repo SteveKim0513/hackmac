@@ -180,7 +180,7 @@
 }
 
 /* ── 스레드: 왼쪽 상태 + 오른쪽 채팅(계획서 8.4) ── */
-.app-shell.is-thread {
+.app-content.is-thread {
   overflow: hidden;
   padding-bottom: 20px;
 }
@@ -700,4 +700,22 @@
 
 .recipe-copied {
   align-self: center;
+}
+
+/* 스레드 화면의 "‹ 홈" — 상세 화면은 툴바의 뒤로 버튼을 쓰지만, 스레드는 왼쪽 상태 열 맨 위에 둔다 */
+.back-button {
+  background: none;
+  border: none;
+  color: var(--accent-default);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 20px;
+  transition: opacity 100ms var(--ease);
+}
+
+.back-button:hover {
+  opacity: 0.7;
 }

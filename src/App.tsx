@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ServiceMeta, ThemePreference } from '../shared/types';
 import { VENDOR_LABEL, type AccountsView, type BundlePreview, type ThreadView } from '../shared/studio';
 import { ServiceGrid } from './store/ServiceGrid';
@@ -22,6 +22,8 @@ export default function App() {
   const [bundle, setBundle] = useState<{ file: string; preview: BundlePreview } | null>(null);
   const [installing, setInstalling] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const contentRef = useRef<HTMLElement>(null);
   const { toasts, push, dismiss } = useToasts();
 
   useEffect(() => {
@@ -113,24 +115,56 @@ export default function App() {
   };
 
   const selected = view.name === 'detail' ? services.find((s) => s.id === view.serviceId) ?? null : null;
+  const isDetail = view.name === 'detail' && selected !== null;
+
+  // 화면을 바꾸면 새 화면은 맨 위부터 보여야 한다 — 스크롤 컨테이너가
+  // 창 전체가 아니라 .app-content 하나라 직접 되돌린다. (훅이라 아래의 early return보다 앞에 둔다)
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+    setScrolled(false);
+  }, [view]);
+
+  /** 모든 화면이 같은 틀을 쓴다: 위에 창을 끌 수 있는 툴바 띠, 아래에 본문 */
+  const frame = (opts: { left?: React.ReactNode; actions?: React.ReactNode; extraClass?: string; children: React.ReactNode }) => (
+    <div className="app-shell">
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
+      <div className={`titlebar ${scrolled ? 'is-scrolled' : ''}`}>
+        {opts.left}
+        <div className="titlebar-spacer" />
+        {opts.actions}
+      </div>
+      <main className={`app-content ${opts.extraClass ?? ''}`} ref={contentRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}>
+        {opts.children}
+      </main>
+    </div>
+  );
+
+  const commonActions = (
+    <>
+      <ThemeSwitch value={themePreference} onChange={handleThemeChange} />
+      <button className="header-button" onClick={() => void handleCheckForUpdates()}>
+        업데이트 확인
+      </button>
+      <button className="header-button" onClick={() => void window.playbook.openLogsFolder()}>
+        로그 보기
+      </button>
+    </>
+  );
 
   // 엔진을 아직 확인하는 중(첫 1초 남짓)
   if (!accounts) {
-    return <div className="app-shell app-loading">AI 계정을 확인하는 중…</div>;
+    return frame({ extraClass: 'app-loading', children: 'AI 계정을 확인하는 중…' });
   }
   // 로그인한 엔진이 없거나 둘 중 골라야 하면 첫 실행 화면이 먼저다(계획서 2절)
   if (!accounts.engine) {
-    return (
-      <div className="app-shell">
-        <Onboarding accounts={accounts} onAccounts={setAccounts} />
-      </div>
-    );
+    return frame({ children: <Onboarding accounts={accounts} onAccounts={setAccounts} /> });
   }
 
   if (view.name === 'thread') {
-    return (
-      <div className="app-shell is-thread">
-        <ToastStack toasts={toasts} onDismiss={dismiss} />
+    return frame({
+      extraClass: 'is-thread',
+      actions: <div className="header-actions">{commonActions}</div>,
+      children: (
         <ThreadPage
           threadId={view.threadId}
           onBack={() => {
@@ -144,69 +178,76 @@ export default function App() {
             });
           }}
         />
-      </div>
-    );
+      ),
+    });
   }
 
   const building = threads.filter((t) => !t.meta.appId);
   const engine = accounts.engine;
 
-  return (
-    <div className="app-shell">
-      <ToastStack toasts={toasts} onDismiss={dismiss} />
-      {showAccounts && <AccountsDialog accounts={accounts} onAccounts={setAccounts} onClose={() => setShowAccounts(false)} />}
-      {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
-      {view.name === 'store' || !selected ? (
-        <>
-          <header className="app-header">
-            <div>
-              <h1>HackMac</h1>
-              <p>이 Mac, 사실 훨씬 더 많은 걸 할 수 있어요.</p>
-            </div>
-            <div className="header-actions">
-              <button className="toggle-button is-active create-app-button" onClick={() => void handleCreate()}>
-                + 앱 만들기
-              </button>
-              <button className="header-button accounts-button" onClick={() => setShowAccounts(true)}>
-                계정
-              </button>
-              <button className="header-button install-app-button" onClick={() => void handlePickBundle()}>
-                앱 파일 설치
-              </button>
-              <ThemeSwitch value={themePreference} onChange={handleThemeChange} />
-              <button className="header-button" onClick={() => void handleCheckForUpdates()}>
-                업데이트 확인
-              </button>
-              <button className="header-button" onClick={() => void window.playbook.openLogsFolder()}>
-                로그 보기
-              </button>
-            </div>
-          </header>
-          {building.length > 0 && (
-            <section className="home-section">
-              <h2>만드는 중</h2>
-              <div className="thread-list">
-                {building.map((t) => (
-                  <button key={t.meta.id} className="thread-card" onClick={() => setView({ name: 'thread', threadId: t.meta.id })}>
-                    <span className="thread-card-title">{t.meta.title}</span>
-                    <span className="thread-card-sub">
-                      {t.busy ? '답을 쓰는 중' : '요구 정리'} · {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
-                    </span>
-                  </button>
-                ))}
+  return frame({
+    left: isDetail ? (
+      <>
+        <button className="titlebar-back" onClick={() => setView({ name: 'store' })} aria-label="스토어로 돌아가기" title="스토어로 돌아가기">
+          <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden="true">
+            <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <span className="titlebar-title">{selected.name}</span>
+      </>
+    ) : null,
+    actions: (
+      <div className="header-actions">
+        {!isDetail && (
+          <>
+            <button className="toggle-button is-active create-app-button" onClick={() => void handleCreate()}>
+              + 앱 만들기
+            </button>
+            <button className="header-button accounts-button" onClick={() => setShowAccounts(true)}>
+              계정
+            </button>
+            <button className="header-button install-app-button" onClick={() => void handlePickBundle()}>
+              앱 파일 설치
+            </button>
+          </>
+        )}
+        {commonActions}
+      </div>
+    ),
+    children: (
+      <>
+        {showAccounts && <AccountsDialog accounts={accounts} onAccounts={setAccounts} onClose={() => setShowAccounts(false)} />}
+        {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
+        {isDetail ? (
+          <ServiceDetail service={selected} onToggle={handleToggle} onExport={handleExport} />
+        ) : (
+          <>
+            <header className="app-header">
+              <div>
+                <h1>HackMac</h1>
+                <p>이 Mac, 사실 훨씬 더 많은 걸 할 수 있어요.</p>
               </div>
-            </section>
-          )}
-          <h2 className="home-section-title">내 앱</h2>
-          <ServiceGrid
-            services={services}
-            onActivate={handleActivate}
-            onOpen={(service) => setView({ name: 'detail', serviceId: service.id })}
-          />
-        </>
-      ) : (
-        <ServiceDetail service={selected} onBack={() => setView({ name: 'store' })} onToggle={handleToggle} onExport={handleExport} />
-      )}
-    </div>
-  );
+            </header>
+            {building.length > 0 && (
+              <section className="home-section">
+                <h2>만드는 중</h2>
+                <div className="thread-list">
+                  {building.map((t) => (
+                    <button key={t.meta.id} className="thread-card" onClick={() => setView({ name: 'thread', threadId: t.meta.id })}>
+                      <span className="thread-card-title">{t.meta.title}</span>
+                      <span className="thread-card-sub">
+                        {t.busy ? '답을 쓰는 중' : '요구 정리'} · {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            <h2 className="home-section-title">내 앱</h2>
+            <ServiceGrid services={services} onActivate={handleActivate} onOpen={(service) => setView({ name: 'detail', serviceId: service.id })} />
+          </>
+        )}
+      </>
+    ),
+  });
 }

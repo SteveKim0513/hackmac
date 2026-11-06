@@ -124,11 +124,80 @@ input:focus-visible {
 
 .app-shell {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* macOS 통합 툴바(NSToolbar unified) 자리 — hiddenInset이라 OS 타이틀바가
+   없으므로 이 띠가 창을 끌 수 있는 유일한 영역이다. 52px는 Big Sur 이후
+   App Store·Finder의 툴바 높이이고, electron/main.ts의
+   trafficLightPosition(y:18)이 이 높이의 세로 가운데에 맞춰져 있다.
+   안의 버튼은 no-drag로 빼야 클릭이 먹는다(drag 영역 위의 클릭은 렌더러에
+   전달되지 않는다). 더블클릭 시 확대/축소는 drag 영역이면 macOS가 시스템
+   설정대로 알아서 처리한다. */
+.titlebar {
+  flex: none;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 왼쪽 84px — 트래픽라이트(x:20 + 클러스터 폭 ~52px) 뒤에 12px 틈. */
+  padding: 0 16px 0 84px;
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  transition: border-color 150ms var(--ease);
+  -webkit-app-region: drag;
+}
+
+/* 네이티브 툴바처럼 평소엔 경계선이 없다가, 본문이 툴바 아래로 스크롤돼
+   들어갈 때만 헤어라인이 생긴다. */
+.titlebar.is-scrolled {
+  border-bottom-color: var(--border);
+}
+
+.titlebar button,
+.titlebar .theme-switch {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-spacer {
+  flex: 1;
+}
+
+.titlebar-back {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  transition: background 100ms var(--ease), color 100ms var(--ease);
+}
+
+.titlebar-back:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  /* 왼쪽만 92px — electron/main.ts가 고정한 트래픽라이트 위치(x:20)에
-     클러스터 폭(~54px)과 숨 쉴 틈(~18px)을 더한 값. hiddenInset 타이틀바라
-     이 여백이 없으면 "HackMac" 제목이 빨간/노란/초록 버튼과 거의 붙어 보인다. */
-  padding: 28px 36px 60px 92px;
+  padding: 12px 36px 60px;
 }
 
 .app-header {
@@ -156,9 +225,9 @@ input:focus-visible {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
-  padding-top: 4px;
 }
 
 .header-button {
@@ -166,9 +235,11 @@ input:focus-visible {
   background: var(--surface-hover);
   color: var(--text);
   border-radius: var(--radius-full);
-  padding: 7px 14px;
+  /* 툴바 컨트롤 높이(26px)에 맞춘 크기 — 세그먼트 컨트롤과 높이를 맞춘다. */
+  height: 26px;
+  padding: 0 12px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
@@ -199,7 +270,9 @@ input:focus-visible {
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 5px 11px;
+  /* 트랙 패딩 2px x2 + 22px = 툴바 버튼과 같은 26px. */
+  height: 22px;
+  padding: 0 10px;
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: background 120ms var(--ease), color 120ms var(--ease), box-shadow 120ms var(--ease);
@@ -340,31 +413,11 @@ input:focus-visible {
 
 .detail-page {
   --accent: var(--accent-default);
-  /* margin:0 auto였을 때는 .app-shell의 비대칭 여백(트래픽라이트 때문에
-     왼쪽 92px/오른쪽 36px) 안에서 이 블록이 다시 가운데 정렬돼서,
-     스토어 화면의 왼쪽 끝(x:92)과 상세 화면 본문의 왼쪽 끝이 서로 달랐다 —
-     서비스를 열 때마다 화면이 미세하게 좌우로 튀어 보이는 원인이었다.
-     가운데 정렬을 버리고 같은 왼쪽 기준선에 붙여서, 스토어 헤더·그리드·
-     상세 본문이 항상 같은 x에서 시작하게 한다. */
+  /* 가운데 정렬(margin:0 auto)하지 않는다 — 그러면 스토어 헤더·그리드와
+     상세 본문의 왼쪽 시작점이 달라져서, 서비스를 열 때마다 화면이 좌우로
+     튀어 보인다. 같은 왼쪽 기준선에 붙인다. */
   max-width: 720px;
   animation: card-in 200ms var(--ease);
-}
-
-.back-button {
-  background: none;
-  border: none;
-  color: var(--accent-default);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 20px;
-  transition: opacity 100ms var(--ease);
-}
-
-.back-button:hover {
-  opacity: 0.7;
 }
 
 .detail-header {

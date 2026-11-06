@@ -77,7 +77,7 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(page.locator('.bubble-assistant').last()).toContainText('설치함: my.today', { timeout: 10_000 });
     await page.locator('.build-box.is-done button').click();
     await expect(page.locator('.detail-page h1')).toHaveText('오늘 날짜');
-    await page.locator('.back-button').click();
+    await page.locator('.titlebar-back').click();
     await expect(page.locator('.service-card-name')).toContainText(['오늘 날짜']);
     // 완성된 앱의 스레드는 "만드는 중"에서 빠진다
     await expect(page.locator('.thread-card')).toHaveCount(0);
