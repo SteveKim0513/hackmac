@@ -5,7 +5,8 @@ import { RecipeDialog } from './RecipeDialog';
 
 interface Props {
   threadId: string;
-  onBack: () => void;
+  /** 뒤로 가기는 툴바(src/App.tsx)가 한다 — 상세 화면과 같은 자리 */
+  onBack?: () => void;
   onOpenApp: (appId: string) => void;
 }
 
@@ -24,7 +25,7 @@ const VERDICT_LABEL = { possible: '가능', conditional: '조건부 가능', imp
  * 스레드 하나 = 앱 하나(계획서 8.4). 왼쪽은 상태, 오른쪽은 채팅. 채팅은 언제나 오른쪽에 있고 왼쪽만 바뀐다.
  * 진행 상태는 엔진 글에서 추측하지 않는다 — 지금은 ① 단계 고정이고, 4단계에서 구조화된 진행 사건이 들어온다.
  */
-export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
+export function ThreadPage({ threadId, onOpenApp }: Props) {
   const [meta, setMeta] = useState<ThreadMeta | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState('');
@@ -109,9 +110,6 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
     <div className="thread-page">
       {recipe && <RecipeDialog recipe={recipe} onClose={() => setRecipe(null)} />}
       <aside className="thread-status">
-        <button className="back-button" onClick={onBack}>
-          ‹ 홈
-        </button>
         <h1 className="thread-title">{meta?.title ?? ''}</h1>
         <p className="thread-engine">{meta?.vendor ? `${VENDOR_LABEL[meta.vendor]}로 만드는 중` : '첫 글을 보내면 시작해요'}</p>
         {meta?.vendor && accounts && (

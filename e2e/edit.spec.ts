@@ -35,7 +35,7 @@ test('만든 앱을 상세에서 [수정하기] → 같은 채팅이 다시 열�
   await expect(page.locator('.req-row .req-text')).toHaveText(['단축키를 누르면 오늘 날짜를 알림으로 보여 준다']);
 
   // 홈의 "만드는 중"에 "고치는 중"으로 다시 보인다
-  await page.locator('.back-button').click();
+  await page.locator('.titlebar-back').click();
   const card = page.locator('.thread-card');
   await expect(card).toHaveCount(1);
   await expect(card).toContainText('고치는 중');
@@ -49,7 +49,7 @@ test('만든 앱을 상세에서 [수정하기] → 같은 채팅이 다시 열�
   await expect(page.locator('[data-audit] strong')).toHaveText('목표 확인 7/7');
 
   // 고치기가 끝나면 "만드는 중"에서 다시 빠진다
-  await page.locator('.back-button').click();
+  await page.locator('.titlebar-back').click();
   await expect(page.locator('.thread-card')).toHaveCount(0);
 });
 
@@ -63,6 +63,6 @@ test('작업실 밖에서 온 앱(기본 앱)도 [수정하기]하면 새 채팅
   await expect(page.locator('.bubble-notice').last()).toContainText('이 앱을 고치기 시작해요');
   await expect(page.locator('.chat-empty')).toHaveCount(0);
   // 다시 [수정하기]를 눌러도 같은 스레드로 간다(새로 만들지 않는다)
-  await page.locator('.back-button').click();
+  await page.locator('.titlebar-back').click();
   await expect(page.locator('.thread-card')).toHaveCount(1);
 });

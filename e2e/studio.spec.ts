@@ -54,7 +54,7 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(page.locator('.bubble-user')).toHaveText('메뉴바에 시계');
     await expect(page.locator('.bubble-assistant').last()).toHaveText('echo:메뉴바에 시계', { timeout: 10_000 });
     await expect(page.locator('.thread-title')).toHaveText('메뉴바에 시계');
-    await page.locator('.back-button').click();
+    await page.locator('.titlebar-back').click();
     await expect(page.locator('.thread-card-title')).toHaveText('메뉴바에 시계');
     await page.locator('.thread-card').click();
     // 다시 열면 지난 대화가 그대로 있다

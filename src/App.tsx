@@ -4,7 +4,7 @@ import { VENDOR_LABEL, type AccountsView, type BundlePreview, type ThreadView } 
 import { ServiceGrid } from './store/ServiceGrid';
 import { ServiceDetail } from './detail/ServiceDetail';
 import { ToastStack, useToasts } from './components/Toast';
-import { ThemeSwitch } from './components/ThemeSwitch';
+import { MoreMenu } from './components/MoreMenu';
 import { AccountsDialog } from './studio/AccountsDialog';
 import { BundlePreviewDialog } from './studio/BundlePreviewDialog';
 import { Onboarding } from './studio/Onboarding';
@@ -122,7 +122,7 @@ export default function App() {
     else push(`업데이트를 확인하지 못했어요: ${result.message}`, 'error');
   };
 
-  const selected = view.name === 'detail' ? services.find((s) => s.id === view.serviceId) ?? null : null;
+  const selected = view.name === 'detail' ? (services.find((s) => s.id === view.serviceId) ?? null) : null;
   const isDetail = view.name === 'detail' && selected !== null;
 
   // 화면을 바꾸면 새 화면은 맨 위부터 보여야 한다 — 스크롤 컨테이너가
@@ -148,15 +148,12 @@ export default function App() {
   );
 
   const commonActions = (
-    <>
-      <ThemeSwitch value={themePreference} onChange={handleThemeChange} />
-      <button className="header-button" onClick={() => void handleCheckForUpdates()}>
-        업데이트 확인
-      </button>
-      <button className="header-button" onClick={() => void window.playbook.openLogsFolder()}>
-        로그 보기
-      </button>
-    </>
+    <MoreMenu
+      theme={themePreference}
+      onTheme={handleThemeChange}
+      onCheckUpdates={() => void handleCheckForUpdates()}
+      onOpenLogs={() => void window.playbook.openLogsFolder()}
+    />
   );
 
   // 엔진을 아직 확인하는 중(첫 1초 남짓)
@@ -168,8 +165,28 @@ export default function App() {
     return frame({ children: <Onboarding accounts={accounts} onAccounts={setAccounts} /> });
   }
 
+  const backToHome = (label: string) => (
+    <>
+      <button
+        className="titlebar-back"
+        onClick={() => {
+          void window.studio.threads().then(setThreads);
+          setView({ name: 'store' });
+        }}
+        aria-label="홈으로 돌아가기"
+        title="홈으로 돌아가기"
+      >
+        <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden="true">
+          <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <span className="titlebar-title">{label}</span>
+    </>
+  );
+
   if (view.name === 'thread') {
     return frame({
+      left: backToHome('앱 만들기'),
       extraClass: 'is-thread',
       actions: <div className="header-actions">{commonActions}</div>,
       children: (
@@ -225,7 +242,9 @@ export default function App() {
     children: (
       <>
         {showAccounts && <AccountsDialog accounts={accounts} onAccounts={setAccounts} onClose={() => setShowAccounts(false)} />}
-        {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
+        {bundle && (
+          <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />
+        )}
         {isDetail ? (
           <ServiceDetail service={selected} onToggle={handleToggle} onExport={handleExport} onEdit={(x) => void handleEdit(x)} />
         ) : (
@@ -244,7 +263,8 @@ export default function App() {
                     <button key={t.meta.id} className="thread-card" onClick={() => setView({ name: 'thread', threadId: t.meta.id })}>
                       <span className="thread-card-title">{t.meta.title}</span>
                       <span className="thread-card-sub">
-                        {t.building ? '전문 담당들이 만드는 중' : t.busy ? '답을 쓰는 중' : t.editing ? '고치는 중' : '요구 정리'} · {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
+                        {t.building ? '전문 담당들이 만드는 중' : t.busy ? '답을 쓰는 중' : t.editing ? '고치는 중' : '요구 정리'} ·{' '}
+                        {t.meta.vendor ? VENDOR_LABEL[t.meta.vendor] : VENDOR_LABEL[engine]}
                       </span>
                     </button>
                   ))}

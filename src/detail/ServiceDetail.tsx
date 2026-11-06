@@ -38,10 +38,7 @@ export function ServiceDetail({ service, onToggle, onExport, onEdit }: Props) {
           <button className="header-button export-app-button" onClick={() => onExport(service)}>
             내보내기
           </button>
-          <button
-            className={`toggle-button ${service.isActive ? 'is-active' : ''}`}
-            onClick={() => onToggle(service)}
-          >
+          <button className={`toggle-button ${service.isActive ? 'is-active' : ''}`} onClick={() => onToggle(service)}>
             {service.isActive ? (
               <>
                 <span className="status-dot" /> 켜짐
@@ -78,7 +75,9 @@ export function ServiceDetail({ service, onToggle, onExport, onEdit }: Props) {
               <ol>
                 {maint.history.slice(0, 8).map((h, i) => (
                   <li key={`${h.at}-${i}`}>
-                    <span className="build-log-at">{new Date(h.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="build-log-at">
+                      {new Date(h.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
                     {h.text}
                   </li>
                 ))}
@@ -90,30 +89,36 @@ export function ServiceDetail({ service, onToggle, onExport, onEdit }: Props) {
 
       <AppSettings appId={service.id} />
 
-      <section className="detail-section">
-        <h2>이게 뭔가요</h2>
-        {service.whatItIs.map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
-      </section>
-
-      <section className="detail-section">
-        <h2>차별점</h2>
-        <ul>
-          {service.differentiators.map((d, i) => (
-            <li key={i}>{d}</li>
+      {service.whatItIs.length > 0 && (
+        <section className="detail-section">
+          <h2>이게 뭔가요</h2>
+          {service.whatItIs.map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
           ))}
-        </ul>
-      </section>
+        </section>
+      )}
 
-      <section className="detail-section">
-        <h2>왜 강력한가</h2>
-        <ul>
-          {service.strengths.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ul>
-      </section>
+      {service.differentiators.length > 0 && (
+        <section className="detail-section">
+          <h2>차별점</h2>
+          <ul>
+            {service.differentiators.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {service.strengths.length > 0 && (
+        <section className="detail-section">
+          <h2>왜 강력한가</h2>
+          <ul>
+            {service.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="detail-section">
         <h2>사용법</h2>

@@ -51,7 +51,7 @@ test('대화 → 레시피 만들기(빈칸만, 개인 값은 안 나감) → �
   await expect(dialog).toHaveCount(0);
 
   // 다른 앱 만들기에 붙여넣는다
-  await page.locator('.back-button').click();
+  await page.locator('.titlebar-back').click();
   await page.locator('.create-app-button').click();
   await expect(page.locator('.chat-empty')).toContainText('레시피가 있으면 여기에 그대로 붙여넣으세요');
   await page.locator('.composer textarea').fill(sent);
