@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { RichText } from '../components/RichText';
 import { VENDOR_LABEL, type AccountsView, type BuildState, type Message, type RecipeView, type ReqStatus, type ThreadMeta } from '../../shared/studio';
 import { RecipeDialog } from './RecipeDialog';
 
@@ -224,12 +225,16 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={`${m.at}-${i}`} className={`bubble bubble-${m.role} ${m.error ? 'is-error' : ''}`}>
-              {m.text || (m.interrupted ? '(멈췄어요)' : '')}
+            <div key={`${m.at}-${i}`} className={`bubble bubble-${m.role} ${m.error ? 'is-error' : ''} ${m.role === 'assistant' && m.text ? 'is-rich' : ''}`}>
+              {m.role === 'assistant' && m.text ? <RichText text={m.text} /> : m.text || (m.interrupted ? '(멈췄어요)' : '')}
               {m.error && <div className="bubble-error">문제가 생겼어요: {m.error}</div>}
             </div>
           ))}
-          {streaming && <div className="bubble bubble-assistant is-streaming">{streaming}</div>}
+          {streaming && (
+            <div className="bubble bubble-assistant is-streaming is-rich">
+              <RichText text={streaming} />
+            </div>
+          )}
           {busy && !streaming && <div className="bubble bubble-assistant is-typing">생각하는 중…</div>}
         </div>
         {notice && <div className="chat-notice">{notice}</div>}
