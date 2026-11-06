@@ -49,7 +49,7 @@ export interface AppView {
   enabled: boolean;
   /** 켜져 있는데 일부 트리거가 못 붙었을 때 */
   problems: string[];
-  /** 카피의 {hotkey:<key>}를 배정된 자리로 채운 선언. 켜져 있지 않으면 '미배정' */
+  /** 카피의 {hotkey:<key>}를 배정된 자리로 채운 선언. 켜져 있지 않으면 '단축키' */
   manifest: AppManifest | null;
   hotkeys: { key: string; name: string; slot: string | null }[];
 }

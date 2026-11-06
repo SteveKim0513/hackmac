@@ -208,7 +208,8 @@ export async function runGate(pkgDir: string, o: GateOptions): Promise<GateRepor
   add('checks', '시험', [
     ...failedRuns.map((r) => `${r.file}: 실패(코드 ${r.code}) — ${r.output.split('\n').slice(-3).join(' / ')}`),
     ...missingReq.map((id) => `${id}: 시험이 없음 → checks/${id}-<이름>.sh를 만든다(자동으로 확인할 수 없으면 manual로 표시)`),
-    ...(checkFiles.length === 0 && !(o.requirements ?? []).every((r) => r.manual) ? ['checks/*.sh가 하나도 없음'] : []),
+    // 모든 요구사항을 manual로 표시해 시험을 통째로 피하지 못하게: 직접 확인 요구사항도 판단 부분 시험은 있어야 한다
+    ...(checkFiles.length === 0 ? ['checks/*.sh가 하나도 없음 — 직접 확인(manual) 요구사항도 판단·가공 부분은 시험한다'] : []),
   ]);
 
   return { ok: checks.every((c) => c.ok), checks, runs, requirements, manifest: m };

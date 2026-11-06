@@ -61,7 +61,7 @@ describe('Platform', () => {
     const v = p.list()[0];
     expect(v).toMatchObject({ id: 'hackmac.gtd-reminders', version: 1, enabled: false });
     expect(v.hotkeys.map((h) => h.key)).toContain('register');
-    expect(v.manifest!.usage[0]).toContain('(미배정)');
+    expect(v.manifest!.usage[0]).toContain('(단축키)');
   });
 
   it('켜면 자리를 배정해 단축키를 등록하고, 누르면 스크립트가 env와 함께 돈다', async () => {

@@ -49,6 +49,6 @@ describe('slots', () => {
   it('fillHotkeys: 카피의 자리표시를 채운다', () => {
     const a = assign({}, 'a.x', ['register'])!;
     expect(fillHotkeys("'업무 등록'({hotkey:register})을 누르세요", a, 'a.x')).toBe("'업무 등록'(Alt+1)을 누르세요");
-    expect(fillHotkeys('{hotkey:none}', a, 'a.x')).toBe('미배정');
+    expect(fillHotkeys('{hotkey:none}', a, 'a.x')).toBe('단축키');
   });
 });

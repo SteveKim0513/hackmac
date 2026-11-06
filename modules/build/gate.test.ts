@@ -133,6 +133,14 @@ describe('runGate', () => {
     expect(r.runs.find((x) => x.file === 'checks/R1-env.sh')).toMatchObject({ ok: true });
   });
 
+  it('요구사항이 전부 manual이어도 시험 파일이 하나도 없으면 막는다', async () => {
+    goodApp();
+    rmSync(join(pkg, 'checks'), { recursive: true });
+    const r = await runGate(pkg, opts({ requirements: [{ id: 'R1', manual: true }] }));
+    expect(failed(r)).toEqual(['checks']);
+    expect(r.checks.find((c) => c.id === 'checks')!.problems[0]).toContain('하나도 없음');
+  });
+
   it('멈춘 시험은 시간 초과로 끊는다', async () => {
     goodApp();
     write('checks/R1-hang.sh', '#!/bin/zsh\nsleep 30\n');

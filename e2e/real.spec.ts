@@ -27,24 +27,24 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(ask.or(create)).toBeVisible({ timeout: 30_000 });
     if (await ask.isVisible()) await page.locator(`.vendor-card[data-vendor="${vendor}"] button`).click();
     await create.click();
+    // 끝난 답만 센다(쓰는 중·생각하는 중 말풍선 제외). 보낸 직후엔 보내기 버튼이 잠깐 그대로라 버튼만 보면 "끝났다"고 착각한다(실제로 겪음)
+    const finished = page.locator('.bubble-assistant:not(.is-streaming):not(.is-typing)');
     const say = async (text: string) => {
+      const before = await finished.count();
       await page.locator('.composer textarea').fill(text);
       await page.locator('.composer textarea').press('Enter');
+      await expect(finished).toHaveCount(before + 1, { timeout: 900_000 });
+      await expect(page.locator('.composer button[type="submit"]')).toBeVisible({ timeout: 900_000 });
     };
+    const threadId = await page.evaluate(async () => (await window.studio.threads())[0].meta.id);
     await say('단축키를 누르면 오늘 날짜와 요일을 알림 배너로 보여 주는 앱을 만들어 줘. 설정은 필요 없어. 요구는 이게 전부고, 확인 질문 없이 바로 끝까지 만들어 줘.');
     const done = page.locator('.build-box.is-done');
-    for (let turn = 0; turn < 6 && !(await done.isVisible()); turn++) {
-      // 답이 끝날 때까지 기다린다(보내기 버튼이 돌아오면 쉬는 중)
-      await expect(page.locator('.composer button[type="submit"]')).toBeVisible({ timeout: 900_000 });
-      const last = await page.locator('.bubble-assistant').last().textContent();
-      console.log(`[${vendor} 턴 ${turn + 1}] ${last?.slice(0, 400)}`);
+    for (let turn = 1; turn <= 6; turn++) {
+      console.log(`[${vendor} 턴 ${turn}] ${(await finished.last().textContent())?.slice(0, 400)}`);
       if (await done.isVisible()) break;
       await say('네, 그대로 진행해 주세요. 끝까지 만들어서 설치해 주세요.');
     }
-    const state = await page.evaluate(async () => {
-      const ts = await window.studio.threads();
-      return window.studio.build(ts[0].meta.id);
-    });
+    const state = await page.evaluate((id) => window.studio.build(id), threadId);
     console.log(`[${vendor}] 최종 상태`, JSON.stringify({ step: state?.step, req: state?.requirements, verdict: state?.verdict?.kind, gate: state?.gate?.ok, installed: state?.installed, log: state?.log.map((l) => l.text) }, null, 1));
     await expect(done).toBeVisible();
     await page.locator('.build-box.is-done button').click();

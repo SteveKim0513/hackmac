@@ -50,6 +50,6 @@ export const move = (a: Assignments, id: string, slot: string): Assignments | nu
 
 export const freeCount = (a: Assignments): number => SLOT_POOL.length - taken(a).size;
 
-/** 카피의 `{hotkey:<key>}`를 배정된 자리로 채운다. 배정 전이면 "미배정" */
+/** 카피의 `{hotkey:<key>}`를 배정된 자리로 채운다. 배정 전(앱을 켜기 전)이면 "단축키" — "단축키 한 번이면 …"처럼 읽히게 */
 export const fillHotkeys = (text: string, a: Assignments, appId: string): string =>
-  text.replace(/\{hotkey:([a-z0-9-]+)\}/g, (_, key: string) => a[slotId(appId, key)] ?? '미배정');
+  text.replace(/\{hotkey:([a-z0-9-]+)\}/g, (_, key: string) => a[slotId(appId, key)] ?? '단축키');
