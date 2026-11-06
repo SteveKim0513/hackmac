@@ -16,7 +16,7 @@
 | Node | 불필요(네이티브 바이너리) | 불필요 |
 | 무결성 | manifest SHA256 + GPG 서명 + Apple 공증 | SHA256SUMS |
 | 자동 업데이트 | 백그라운드 자동(공식). `autoUpdatesChannel: "stable"` | 문서 없음(모름). 앱이 주기적으로 `codex update` 호출 |
-| PATH 건드림 | 안 함 | `.zshrc`에 PATH 블록 추가(무해하나 사용자 파일을 건드림) |
+| PATH 건드림 | 안 함 | 기존 Codex가 PATH에 안 보이고 `~/.local/bin`이 PATH에 있으면 안 건드림. 기존 npm·brew Codex가 보이면 `.zprofile`에 PATH 줄을 넣는다(실측). HackMac은 설치기에 `~/.local/bin`+기본 폴더만 PATH로 줘서 건드리지 않게 한다 |
 | 앱 전용 폴더 설치 | 불가(런처 경로 고정, 옮기면 자동 업데이트 품질 저하) | `CODEX_INSTALL_DIR`로 가능하나 한쪽만 옮기면 일관성 없음 → 기본 위치 유지 |
 | 최소 macOS | 13.0+, arm64·x64 | 12+, arm64·x64 |
 
@@ -74,6 +74,13 @@ Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두
 - `ProcessType` 미지정이면 CPU·I/O가 제한된다 → `Interactive`. v1의 `powerSaveBlocker`와 중복 여부는 스파이크.
 
 권한 승인 창 이름: TCC는 책임 프로세스(responsible process)의 이름을 쓴다. launchd가 번들 안 `HackMac` 바이너리를 직접 띄우면 HackMac이 책임 프로세스이고 `zsh → osascript` 자식은 이를 상속해 "HackMac"으로 뜬다(DTS 답변 + v1 동작과 일치, launchd 경로는 실측 필요). `NSAppleEventsUsageDescription`은 상주 번들 Info.plist에 있어야 한다.
+
+## 1.1 자동 설치 실측 (2026-11-06)
+
+진짜 공식 설치기를 빈 가짜 홈에 돌렸다(`modules/prepare/install.ts`, 이 Mac의 기존 설치는 그대로).
+- Codex: 21초, `codex-cli 0.167.0`, `~/.local/bin/codex`와 `~/.codex/`만 생김. 쉘 설정 파일 없음(PATH 제한 뒤). 제한 전에는 `.zprofile`이 생겼다.
+- Claude: 설치 완료, `.local`·`.claude`·`.claude.json`·`.cache`만 생김. 쉘 설정 파일 없음. 내려받는 동안 홈이 560MB까지 찼다(디스크 여유 필요).
+- 남은 것: 인터넷이 없을 때·디스크가 모자랄 때의 실패 문구는 실제로 겪어 보지 못했다(실패 경로는 가짜 스크립트로만 시험).
 
 ## 4.5 제작 에이전트 격리 실측 (계획서 10.1)
 
