@@ -15,9 +15,10 @@
     "dist": "npm run test:e2e && APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish never",
     "prerelease": "npm run kill:dev --silent",
     "release": "npm run test:e2e && GH_TOKEN=$(gh auth token --user SteveKim0513) APPLE_KEYCHAIN_PROFILE=hackmac-notary electron-builder --publish always",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && vitest run",
     "test:e2e": "npm run build && npm run kill:dev --silent && playwright test",
-    "kill:dev": "pkill -f \"$(pwd)/node_modules/electron/dist/Electron.app\" 2>/dev/null; true"
+    "kill:dev": "pkill -f \"$(pwd)/node_modules/electron/dist/Electron.app\" 2>/dev/null; true",
+    "test": "vitest run"
   },
   "dependencies": {
     "electron-log": "^5.4.4",
@@ -36,7 +37,8 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^5.1.0"
   },
   "build": {
     "appId": "co.imaginefutures.hackmac",
