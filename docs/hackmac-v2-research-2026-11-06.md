@@ -123,3 +123,16 @@ Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두
 - 이 빌드의 버전이 이미 설치된 v1 라인(0.2.9)과 같다. 배포 전에 올려야 자동 업데이트가 새 버전으로 본다.
 
 아직 못 한 것: 위 1~5·7번. 실제로 띄워야 아는 것들이고, 사용자의 진짜 HackMac(`/Applications`, 같은 userData)과 겹쳐서 사용자 결정을 기다린다.
+
+### 5.2 진짜로 설치해 확인한 것 (2026-11-06, `/Applications`에 설치, 사용자 데이터 백업 후)
+
+백업: `~/HackMac-backup-2026-11-06/`(userData 6MB, 옛 v1 앱). 확인 방법은 launchctl과 앱 로그.
+
+1. **KeepAlive 확인됨.** `launchctl kickstart`로 띄운 인스턴스를 `kill -9` → 약 25초 뒤 새 pid로 재시작(runs 2→3). 앱의 정상 종료(코드 0)는 재시작되지 않음(`state = not running`, runs 그대로).
+2. **등록 확인됨.** `setLoginItemSettings({type:'agentService'})` 직후 `상주 agent 등록 상태: enabled`, `launchctl print`에 `managed_by = com.apple.xpc.ServiceManagement`로 보임. 로그인 항목 목록에 "HackMac"으로 뜨는지는 눈으로 못 봄.
+3. **일부 확인됨.** launchd가 띄운 인스턴스(`launchd=true`)에서 단축키 복원 성공(`복원: 켜짐 1개, 실패 0개`, v1 GTD 설정이 v2로 옮겨짐). 트레이 아이콘·알림 배너·Dock 동작은 못 봄.
+5. **확인됨.** 상주(창 0개)일 때 Finder에서 앱을 다시 열면 같은 프로세스에 창이 1개 뜬다.
+- 발견: 사용자가 앱을 직접 열어 처음 등록하면 launchd가 곧바로 한 번 띄우는데, 단일 인스턴스 락에 막혀 코드 0으로 물러난다(정상). 그 뒤 다음 로그인부터 launchd가 상주 인스턴스를 띄운다.
+- 발견: `ELECTRON_RUN_AS_NODE=1`이 걸린 셸에서는 앱 바이너리를 직접 실행해도 앱이 안 뜬다(`env -u`로 해결). Finder/`open`은 영향 없음.
+
+못 한 것: 4(권한 프롬프트 이름·저장 위치, 켜고 단축키를 눌러야 함), 7(업데이트 교체 뒤 재시작, 실제 릴리스가 있어야 함).
