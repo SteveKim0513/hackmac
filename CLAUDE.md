@@ -88,6 +88,8 @@ modules/account/         ─ claude/codex CLI 찾기·로그인 상태·로그�
 modules/conversation/    ─ 대화 엔진 공통 인터페이스 + Claude(stream-json)·Codex(app-server) 어댑터. 실제 CLI 시험은 HACKMAC_REAL_ENGINES=1
 modules/thread/          ─ 스레드 보관(스레드 하나 = 앱 하나, userData/threads/<id>/: thread.json·messages.jsonl·work/)
 modules/studio/chat.ts   ─ 스레드마다 엔진을 이어 열고 대화를 쌓는다. 스레드는 처음 회사를 지킨다
+modules/bundle/          ─ .hackapp 꾸러미: 묶기(pack)·검증하며 풀기(unpack)·선언 요약(preview, 실행 안 함). Platform.exportApp/previewBundle/installBundle이 쓴다
+modules/prepare/         ─ CLI 자동 설치(공식 설치 스크립트, 설치기에 기존 PATH를 안 보여 줌)
 modules/build/           ─ 제작: gate(검증 게이트)·progress(진행 기록)·inbox(에이전트↔HackMac 파일 통로)·evaluate(별도 역할 평가)·builder(스레드별 제작)·agent(지시·격리 설정)
 resources/agent/         ─ 제작 에이전트 지시(builder.md)·능력 목록(capabilities.md). 능력을 추가하면 capabilities.md도 고친다(평가와 제작이 이 글을 본다)
 resources/bin/hackmac-build ─ 에이전트가 부르는 제작 명령. hackmac-popup-stub은 게이트가 시험을 돌릴 때 쓰는 가짜 팝업

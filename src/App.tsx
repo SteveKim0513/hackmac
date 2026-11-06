@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ServiceMeta, ThemePreference } from '../shared/types';
-import { VENDOR_LABEL, type AccountsView, type ThreadView } from '../shared/studio';
+import { VENDOR_LABEL, type AccountsView, type BundlePreview, type ThreadView } from '../shared/studio';
 import { ServiceGrid } from './store/ServiceGrid';
 import { ServiceDetail } from './detail/ServiceDetail';
 import { ToastStack, useToasts } from './components/Toast';
 import { ThemeSwitch } from './components/ThemeSwitch';
+import { BundlePreviewDialog } from './studio/BundlePreviewDialog';
 import { Onboarding } from './studio/Onboarding';
 import { ThreadPage } from './studio/ThreadPage';
 import './studio/studio.css';
@@ -17,6 +18,8 @@ export default function App() {
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
   const [accounts, setAccounts] = useState<AccountsView | null>(null);
   const [threads, setThreads] = useState<ThreadView[]>([]);
+  const [bundle, setBundle] = useState<{ file: string; preview: BundlePreview } | null>(null);
+  const [installing, setInstalling] = useState(false);
   const { toasts, push, dismiss } = useToasts();
 
   useEffect(() => {
@@ -37,6 +40,32 @@ export default function App() {
       offChat();
     };
   }, []);
+
+  // 받은 앱 파일: 고르면 선언 요약만 보여 주고(아무것도 실행하지 않는다), 사용자가 확인하면 설치한다
+  const handlePickBundle = async () => {
+    const r = await window.playbook.pickBundle();
+    if (!r.picked) return;
+    if (!r.result.ok) return push(`이 파일은 설치할 수 없어요: ${r.result.errors.join(' / ')}`, 'error');
+    setBundle({ file: r.file, preview: r.result.preview });
+  };
+
+  const handleInstallBundle = async () => {
+    if (!bundle) return;
+    setInstalling(true);
+    const r = await window.playbook.installBundle(bundle.file);
+    setInstalling(false);
+    if (!r.ok) return push(`설치하지 못했어요: ${r.errors.join(' / ')}`, 'error');
+    const name = bundle.preview.name;
+    setBundle(null);
+    setServices(await window.playbook.listServices());
+    push(`${bundle.preview.icon} ${name}을(를) 내 앱에 넣었어요. 카드를 눌러 켜세요`);
+  };
+
+  const handleExport = async (service: ServiceMeta) => {
+    const r = await window.playbook.exportApp(service.id);
+    if (r.exported) push(`${service.name}을(를) 파일로 내보냈어요`);
+    else if (r.error) push(`내보내지 못했어요: ${r.error}`, 'error');
+  };
 
   const handleCreate = async () => {
     const meta = await window.studio.createThread('');
@@ -123,6 +152,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
       {view.name === 'store' || !selected ? (
         <>
           <header className="app-header">
@@ -133,6 +163,9 @@ export default function App() {
             <div className="header-actions">
               <button className="toggle-button is-active create-app-button" onClick={() => void handleCreate()}>
                 + 앱 만들기
+              </button>
+              <button className="header-button install-app-button" onClick={() => void handlePickBundle()}>
+                앱 파일 설치
               </button>
               <ThemeSwitch value={themePreference} onChange={handleThemeChange} />
               <button className="header-button" onClick={() => void handleCheckForUpdates()}>
@@ -166,7 +199,7 @@ export default function App() {
           />
         </>
       ) : (
-        <ServiceDetail service={selected} onBack={() => setView({ name: 'store' })} onToggle={handleToggle} />
+        <ServiceDetail service={selected} onBack={() => setView({ name: 'store' })} onToggle={handleToggle} onExport={handleExport} />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, powerSaveBlocker, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerSaveBlocker, shell, Tray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -11,6 +11,7 @@ import { startPopupServer, stopPopupServer } from './popupServer';
 import { activateService, createPlatform, listServices, themeOf } from './platformHost';
 import { startStudio } from './studioHost';
 import type { Platform } from '../modules/platform/platform';
+import { readPackage } from '../modules/store/store';
 import type { ThemePreference } from '../shared/types';
 
 /**
@@ -282,6 +283,48 @@ ipcMain.handle('services:list', () => listServices(requirePlatform()));
 ipcMain.handle('services:activate', (_e, id: string) => activateService(requirePlatform(), id));
 
 ipcMain.handle('services:deactivate', (_e, id: string) => requirePlatform().disable(id));
+
+// 꾸러미(.hackapp): 내보내기·설치하기. 파일 선택 창은 OS 기본(우리가 그릴 수 없다), 확인은 화면의 미리 보기 창에서 한다.
+// HACKMAC_E2E_PICK_FILE / HACKMAC_E2E_SAVE_DIR은 E2E 전용 — 자동화로는 OS 파일 창을 못 누르므로 경로를 직접 넘긴다.
+ipcMain.handle('bundle:pick', async (e) => {
+  const p = requirePlatform();
+  let file = process.env.HACKMAC_E2E_PICK_FILE ?? null;
+  if (!file) {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const r = await (win ? dialog.showOpenDialog(win, { title: 'HackMac 앱 파일 고르기', properties: ['openFile'], filters: [{ name: 'HackMac 앱', extensions: ['hackapp'] }] }) : dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'HackMac 앱', extensions: ['hackapp'] }] }));
+    file = r.canceled ? null : r.filePaths[0] ?? null;
+  }
+  if (!file) return { picked: false as const };
+  const pv = p.previewBundle(file);
+  appLog.info('bundle', `미리 보기: ${path.basename(file)} → ${pv.ok ? `${pv.preview.id} v${pv.preview.appVersion}` : pv.errors.join('; ')}`);
+  return { picked: true as const, file, result: pv };
+});
+
+ipcMain.handle('bundle:install', (_e, file: string) => {
+  const r = requirePlatform().installBundle(String(file));
+  appLog.info('bundle', `설치: ${path.basename(String(file))} → ${r.ok ? `${r.id} (이 맥의 ${r.version}번째 버전)` : r.errors.join('; ')}`);
+  return r.ok ? { ok: true as const, id: r.id } : { ok: false as const, errors: r.errors };
+});
+
+ipcMain.handle('bundle:export', async (e, appId: string) => {
+  const p = requirePlatform();
+  const stamp = p.store.currentDir(String(appId));
+  const m = stamp ? readPackage(stamp) : null;
+  const name = m?.ok ? `${m.manifest.id}-v${m.manifest.version}.hackapp` : `${String(appId)}.hackapp`;
+  let dest: string | null = process.env.HACKMAC_E2E_SAVE_DIR ? path.join(process.env.HACKMAC_E2E_SAVE_DIR, name) : null;
+  if (!dest) {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const opts = { title: '앱 내보내기', defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'HackMac 앱', extensions: ['hackapp'] }] };
+    const r = await (win ? dialog.showSaveDialog(win, opts) : dialog.showSaveDialog(opts));
+    dest = r.canceled ? null : r.filePath ?? null;
+  }
+  if (!dest) return { exported: false as const };
+  const r = p.exportApp(String(appId), dest);
+  appLog.info('bundle', `내보내기: ${String(appId)} → ${r.ok ? dest : r.error}`);
+  return r.ok ? { exported: true as const, file: r.file } : { exported: false as const, error: r.error };
+});
+
+ipcMain.handle('bundle:reveal', (_e, file: string) => shell.showItemInFolder(String(file)));
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
 

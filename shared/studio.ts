@@ -6,8 +6,14 @@ import type { ChatEvent, SendResult } from '../modules/studio/chat';
 import type { Message, ThreadMeta } from '../modules/thread/thread';
 import type { BuildState, ReqStatus, Verdict } from '../modules/build/progress';
 import type { InstallView } from '../modules/prepare/install';
+import type { BundlePreview } from '../modules/bundle/bundle';
 
 export type { BuildState, ChatEvent, InstallView, CliStatus, EngineChoice, LoginView, Message, ReqStatus, SendResult, ThreadMeta, Vendor, Verdict };
+
+export type { BundlePreview };
+export type BundlePick =
+  | { picked: false }
+  | { picked: true; file: string; result: { ok: true; preview: BundlePreview } | { ok: false; errors: string[] } };
 
 export interface VendorView extends CliStatus { installed: boolean }
 export interface AccountsView { vendors: Record<Vendor, VendorView>; choice: EngineChoice; engine: Vendor | null }

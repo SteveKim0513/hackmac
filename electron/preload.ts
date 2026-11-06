@@ -1,9 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { BundlePick } from '../shared/studio';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
 import type { AccountsView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
+  pickBundle: (): Promise<BundlePick> => ipcRenderer.invoke('bundle:pick'),
+  installBundle: (file: string): Promise<{ ok: true; id: string } | { ok: false; errors: string[] }> => ipcRenderer.invoke('bundle:install', file),
+  exportApp: (appId: string): Promise<{ exported: true; file: string } | { exported: false; error?: string }> => ipcRenderer.invoke('bundle:export', appId),
+  revealFile: (file: string): Promise<void> => ipcRenderer.invoke('bundle:reveal', file),
   activateService: (id: string): Promise<ActivateResult> => ipcRenderer.invoke('services:activate', id),
   deactivateService: (id: string): Promise<void> => ipcRenderer.invoke('services:deactivate', id),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),

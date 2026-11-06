@@ -6,11 +6,12 @@
  * 끄기: 그 반대. 자리는 돌려주되 hotkeysPrevious에 남겨 다시 켜면 같은 자리를 받게 한다.
  * 복원: 실행 서버가 다시 뜨면 settings.enabled 순서대로 켠다. 하나가 실패해도 나머지는 켠다.
  */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AppManifest, Trigger } from '../../shared/manifest.ts';
 import { assign, fillHotkeys, release, slotId, type Assignments } from '../hotkey/slots.ts';
+import { extract, pack, preview, unpack, type BundlePreview } from '../bundle/bundle.ts';
 import { Ledger } from '../ledger/ledger.ts';
 import { cronMatches, parseCron, type Cron } from '../runner/cron.ts';
 import { Runner, type RunContext, type RunResult } from '../runner/runner.ts';
@@ -106,6 +107,64 @@ export class Platform {
     const r = this.store.install(pkgDir);
     this.ledger.append(r.ok ? { kind: 'app.installed', appId: r.id, version: r.version } : { kind: 'app.install.rejected', errors: r.errors });
     return r;
+  }
+
+  private tmpDir() {
+    const dir = mkdtempSync(join(tmpdir(), 'hackmac-bundle-'));
+    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  }
+
+  /** 설치된 앱의 현재 버전을 파일 하나(.hackapp)로 내보낸다. 설정값·비밀값·데이터는 들어가지 않는다 */
+  exportApp(appId: string, destFile: string): { ok: true; file: string; fileName: string } | { ok: false; error: string } {
+    const dir = this.store.currentDir(appId);
+    if (!dir) return { ok: false, error: '설치돼 있지 않거나 현재 버전이 없어요' };
+    try {
+      const p = pack(dir);
+      writeFileSync(destFile, p.bytes);
+      this.ledger.append({ kind: 'app.exported', appId, version: p.appVersion, bytes: p.bytes.length });
+      return { ok: true, file: destFile, fileName: p.fileName };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  /** 받은 파일을 풀어 선언만 읽는다(아무것도 실행하지 않는다). 사용자가 이걸 보고 설치를 정한다 */
+  previewBundle(file: string): { ok: true; preview: BundlePreview } | { ok: false; errors: string[] } {
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(file);
+    } catch (e) {
+      return { ok: false, errors: [`파일을 읽을 수 없어요: ${(e as Error).message}`] };
+    }
+    return preview(bytes, {
+      capabilities: this.o.capabilities,
+      installedVersion: (id) => {
+        const dir = this.store.currentDir(id);
+        const r = dir ? readPackage(dir) : null;
+        return r?.ok ? r.manifest.version : null;
+      },
+      tmpDir: () => this.tmpDir(),
+    });
+  }
+
+  /** 미리 보기를 통과한 꾸러미를 설치한다. 켜는 건 따로(사용자가) 한다 */
+  installBundle(file: string): ReturnType<Store['install']> {
+    const pv = this.previewBundle(file);
+    if (!pv.ok) return { ok: false, errors: pv.errors };
+    if (pv.preview.missing.length) {
+      return { ok: false, errors: pv.preview.missing.map((x) => `능력 '${x.name}' ${x.need} 필요 — HackMac 업데이트가 필요해요`) };
+    }
+    const tmp = this.tmpDir();
+    try {
+      extract(unpack(readFileSync(file)), tmp.dir);
+      const r = this.install(tmp.dir);
+      if (r.ok) this.ledger.append({ kind: 'app.imported', appId: r.id, version: r.version, from: 'file' });
+      return r;
+    } catch (e) {
+      return { ok: false, errors: [(e as Error).message] };
+    } finally {
+      tmp.cleanup();
+    }
   }
 
   list(): AppView[] {

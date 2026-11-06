@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { launchApp, type AppHandle, type LaunchOptions } from './helpers';
 
 // 작업실: 첫 실행 엔진 선택 → 앱 만들기 → 채팅. 진짜 CLI 대신 가짜 CLI(modules/conversation/fixtures)를 쓴다.
@@ -80,3 +83,57 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(page.locator('.thread-card')).toHaveCount(0);
   });
 }
+
+test('내보내기 → 새 HackMac에서 앱 파일 설치: 미리 보기 확인 후 설치, 내 앱에 카드', async () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'hackmac-export-'));
+  try {
+    // A: 제작 흐름으로 앱을 만들고 상세에서 내보낸다
+    const a = await open({ claude: 'in', env: { HACKMAC_E2E_SAVE_DIR: outDir } });
+    await a.locator('.create-app-button').click({ timeout: 10_000 });
+    await a.locator('.composer textarea').fill('build-demo');
+    await a.locator('.composer textarea').press('Enter');
+    await expect(a.locator('.build-box.is-done')).toBeVisible({ timeout: 60_000 });
+    await a.locator('.build-box.is-done button').click();
+    await a.locator('.export-app-button').click();
+    const file = join(outDir, 'my.today-v1.hackapp');
+    await expect.poll(() => existsSync(file), { timeout: 10_000 }).toBe(true);
+    expect(statSync(file).size).toBeGreaterThan(100);
+    await handle!.cleanup();
+    handle = null;
+
+    // B: 아무것도 없는 다른 HackMac. 파일로 설치한다
+    const b = await open({ claude: 'in', env: { HACKMAC_E2E_PICK_FILE: file } });
+    await expect(b.locator('.service-card-name')).not.toContainText(['오늘 날짜'], { timeout: 10_000 });
+    await b.locator('.install-app-button').click();
+    const dialog = b.locator('[data-bundle-preview="my.today"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('h2')).toHaveText('오늘 날짜');
+    await expect(dialog).toContainText('서명이 없어요');
+    await expect(dialog).toContainText('다른 앱이나 인터넷을 쓰지 않아요');
+    // 취소하면 아무것도 설치되지 않는다
+    await dialog.locator('button', { hasText: '취소' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(b.locator('.service-card-name')).not.toContainText(['오늘 날짜']);
+    await b.locator('.install-app-button').click();
+    await b.locator('[data-bundle-preview="my.today"] button', { hasText: '설치' }).click();
+    await expect(b.locator('.service-card-name')).toContainText(['오늘 날짜'], { timeout: 10_000 });
+    await expect(b.locator('.toast')).toContainText('내 앱에 넣었어요');
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test('깨진 앱 파일은 설치 창 없이 이유를 알려 준다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hackmac-badfile-'));
+  try {
+    const { writeFileSync } = await import('node:fs');
+    const bad = join(dir, 'bad.hackapp');
+    writeFileSync(bad, 'not a hackapp');
+    const page = await open({ claude: 'in', env: { HACKMAC_E2E_PICK_FILE: bad } });
+    await page.locator('.install-app-button').click({ timeout: 10_000 });
+    await expect(page.locator('.toast-error')).toContainText('HackMac 앱 파일이 아니에요');
+    await expect(page.locator('.modal-card')).toHaveCount(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

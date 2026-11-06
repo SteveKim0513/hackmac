@@ -4,9 +4,10 @@ interface Props {
   service: ServiceMeta;
   onBack: () => void;
   onToggle: (service: ServiceMeta) => void;
+  onExport: (service: ServiceMeta) => void;
 }
 
-export function ServiceDetail({ service, onBack, onToggle }: Props) {
+export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
   return (
     <div className="detail-page" style={{ ['--accent' as string]: service.accentColor }}>
       <button className="back-button" onClick={onBack}>
@@ -19,18 +20,23 @@ export function ServiceDetail({ service, onBack, onToggle }: Props) {
           <h1>{service.name}</h1>
           <p className="detail-tagline">{service.tagline}</p>
         </div>
-        <button
-          className={`toggle-button ${service.isActive ? 'is-active' : ''}`}
-          onClick={() => onToggle(service)}
-        >
-          {service.isActive ? (
-            <>
-              <span className="status-dot" /> 켜짐
-            </>
-          ) : (
-            '꺼짐'
-          )}
-        </button>
+        <div className="detail-actions">
+          <button className="header-button export-app-button" onClick={() => onExport(service)}>
+            내보내기
+          </button>
+          <button
+            className={`toggle-button ${service.isActive ? 'is-active' : ''}`}
+            onClick={() => onToggle(service)}
+          >
+            {service.isActive ? (
+              <>
+                <span className="status-dot" /> 켜짐
+              </>
+            ) : (
+              '꺼짐'
+            )}
+          </button>
+        </div>
       </header>
 
       <section className="detail-section">
