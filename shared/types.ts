@@ -82,7 +82,7 @@ export interface SelectItem {
  * optional list of the same format the calendar dots under (e.g. days that
  * already have data worth looking at).
  *
- * `status`는 스크립트가 요청하는 게 아니라 `electron/services.ts`가 단축키
+ * `status`는 스크립트가 요청하는 게 아니라 `electron/platformHost.ts`가 단축키
  * 콜백에서 스크립트를 spawn하기 직전에 직접 띄우는, 앱 내부 전용 종류다 —
  * 버튼도 취소도 없이 "지금 실행 중"만 보여주고, 스크립트의 첫 실제 팝업
  * 요청이 오거나(그 요청이 이 창을 대신 밀어낸다) 스크립트가 끝나면

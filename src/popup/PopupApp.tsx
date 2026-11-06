@@ -264,7 +264,7 @@ function DatePopup({ request, onResolve }: { request: Extract<PopupRequest, { ki
   );
 }
 
-/** electron/services.ts가 단축키 콜백에서 스크립트를 spawn하기 직전에
+/** electron/platformHost.ts가 단축키 콜백에서 스크립트를 spawn하기 직전에
  * 직접 띄우는 "지금 실행 중" 표시 — 사용자가 답할 버튼도 취소도 없고,
  * electron/popupWindow.ts의 showRunningStatus/hideRunningStatus가 창
  * 자체를 프로그램적으로 열고 닫으므로 여기선 onResolve를 아예 호출하지

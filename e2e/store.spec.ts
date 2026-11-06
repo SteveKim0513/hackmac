@@ -30,4 +30,10 @@ test('서비스를 켜면 상세 페이지로 들어가고, 단축키 목록이 
   await expect(page.locator('.toggle-button')).toHaveClass(/is-active/);
   const shortcutCount = await page.locator('.shortcut-table tbody tr').count();
   expect(shortcutCount).toBeGreaterThan(0);
+  // v2: 앱은 키를 고르지 않고 HackMac이 자리 풀(⌥1…⌥0, ⌥⇧1…)에서 배정한다(modules/hotkey/slots.ts).
+  // 켠 뒤에는 모든 단축키가 서로 다른 자리를 받아야 하고, 첫 자리는 ⌥ 1이다.
+  const keys = await page.locator('.shortcut-table tbody kbd').allTextContents();
+  expect(keys[0]).toBe('⌥ 1');
+  expect(keys.every((k) => k.startsWith('⌥'))).toBe(true);
+  expect(new Set(keys).size).toBe(keys.length);
 });

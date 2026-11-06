@@ -68,6 +68,15 @@
       ],
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
+      "extraFiles": [
+        {
+          "from": "build/launchd",
+          "to": "Library/LaunchAgents",
+          "filter": [
+            "*.plist"
+          ]
+        }
+      ],
       "extendInfo": {
         "LSUIElement": true
       }

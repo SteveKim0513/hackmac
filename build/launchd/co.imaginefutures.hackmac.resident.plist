@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  HackMac 실행 서버(상주). SMAppService agentService로 등록된다(electron/main.ts의 setLoginItemSettings).
+  - BundleProgram: 번들 기준 상대경로. 앱을 어디로 옮겨도 맞는다.
+  - KeepAlive.SuccessfulExit=false: 죽으면(코드가 0이 아니거나 시그널) 다시 띄우고, 사용자가 트레이에서 "종료"(코드 0)하면 그대로 둔다.
+  - ProcessType=Interactive: 지정 안 하면 launchd가 CPU·I/O를 줄여 단축키 반응이 늦어진다.
+  - PATH: launchd 기본 환경에는 PATH가 없다. 스크립트가 쓰는 표준 경로를 준다.
+  - AbandonProcessGroup은 기본값(false). 실행기는 스크립트를 자기 프로세스 그룹(detached)으로 띄우므로 영향 없음.
+  실제 서명 빌드에서 확인할 것: docs/hackmac-v2-research-2026-11-06.md 5절.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>co.imaginefutures.hackmac.resident</string>
+  <key>BundleProgram</key>
+  <string>Contents/MacOS/HackMac</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>Contents/MacOS/HackMac</string>
+    <string>--role=resident</string>
+  </array>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>co.imaginefutures.hackmac</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

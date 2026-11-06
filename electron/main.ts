@@ -3,14 +3,27 @@ import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { serviceCatalog } from './services';
 import { createTrayIcon } from './tray-icon';
 import { logsRoot } from './exec-log';
 import { checkForUpdatesManually, initAutoUpdate } from './updater';
 import { appLog, describeError } from './log';
 import { startPopupServer, stopPopupServer } from './popupServer';
-import { loadSettings, saveSettings } from './settings';
+import { activateService, createPlatform, listServices, themeOf } from './platformHost';
+import type { Platform } from '../modules/platform/platform';
 import type { ThemePreference } from '../shared/types';
+
+/**
+ * 같은 바이너리가 두 역할로 뜬다(docs/hackmac-v2-plan.md 5절).
+ *   resident: 실행 서버. launchd(SMAppService)가 `--role=resident`로 띄운다. 트레이·단축키·팝업. 창은 안 연다.
+ *   studio:   작업실. 사용자가 Finder에서 열거나 트레이에서 "열기"를 누르면 뜬다.
+ * 인자가 없으면(사용자가 직접 실행) 실행 서버 역할로 뜨되 창도 함께 연다 — 아직 작업실을 분리하기 전의 v1 동작과 같다.
+ */
+type Role = 'resident' | 'studio';
+const ROLE_ARG = process.argv.find((a) => a.startsWith('--role='))?.slice('--role='.length);
+const ROLE: Role = ROLE_ARG === 'studio' ? 'studio' : 'resident';
+const LAUNCHED_BY_LAUNCHD = ROLE_ARG === 'resident';
+/** 번들 안 `Contents/Library/LaunchAgents/<이 이름>.plist` (build/launchd/). electron-builder extraFiles로 들어간다 */
+const RESIDENT_SERVICE = 'co.imaginefutures.hackmac.resident.plist';
 
 // 백그라운드 트레이 유틸리티라, 예상 못한 예외 하나 때문에 이미 켜둔 서비스의
 // 단축키가 전부 죽어버리면 안 된다 — 원인은 로그로 남기고 프로세스는 계속
@@ -47,6 +60,7 @@ if (!gotSingleInstanceLock) app.quit();
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let platform: Platform | null = null;
 
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -125,15 +139,18 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  appLog.info('main', `앱 시작 — v${app.getVersion()}, packaged=${app.isPackaged}, loginItem=${app.getLoginItemSettings().wasOpenedAtLogin}`);
+  appLog.info('main', `앱 시작 — v${app.getVersion()}, packaged=${app.isPackaged}, role=${ROLE}, launchd=${LAUNCHED_BY_LAUNCHD}, loginItem=${app.getLoginItemSettings().wasOpenedAtLogin}`);
   if (!gotSingleInstanceLock) {
     appLog.info('main', '이미 실행 중인 인스턴스가 있어 종료함 (single instance lock)');
     return;
   }
 
+  // 보관소·설정·원장을 먼저 세워야 테마(설정)와 단축키 복원이 가능하다.
+  platform = createPlatform();
+
   // 창을 만들기 전에 먼저 적용해야 위 backgroundColor 계산과 트래픽라이트
   // 등 네이티브 크롬이 처음부터 올바른 밝기로 뜬다.
-  nativeTheme.themeSource = loadSettings().themePreference;
+  nativeTheme.themeSource = themeOf(platform);
   // 렌더러가 `prefers-color-scheme` 미디어쿼리만으로 이 값을 알아내는 데
   // 의존하지 않는다 — 오프스크린으로 뜨는 창(E2E, 트레이에서 조용히 열기)에서
   // macOS의 다크모드 신호가 Chromium 렌더러까지 실시간으로 안 붙는 경우를
@@ -166,8 +183,19 @@ app.whenReady().then(() => {
   // 없으니 패키지된 빌드에서만 설정한다. `openAsHidden`은 macOS 13 이후로는
   // 동작하지 않는 deprecated 옵션이라 넣지 않는다 — 창을 안 띄우는 건 아래
   // `wasOpenedAtLogin` 체크로 직접 처리한다.
+  // v2: SMAppService agent(번들 안 plist, build/launchd/)로 등록한다 — launchd가
+  // `--role=resident`로 띄우고 죽으면 다시 살린다(KeepAlive). Electron 33의
+  // `type: 'agentService'`는 네이티브 모듈 없이 SMAppService를 직접 부른다(macOS 13+).
+  // 사용자가 시스템 설정에서 끄면 status가 'requires-approval'로 온다 — 로그로만 남긴다.
+  // 실제 서명 빌드에서 확인할 것: docs/hackmac-v2-research-2026-11-06.md 5절 1·2.
   if (app.isPackaged) {
-    app.setLoginItemSettings({ openAtLogin: true });
+    try {
+      app.setLoginItemSettings({ openAtLogin: true, type: 'agentService', serviceName: RESIDENT_SERVICE });
+      const status = app.getLoginItemSettings({ type: 'agentService', serviceName: RESIDENT_SERVICE }).status;
+      appLog.info('main', `상주 agent 등록 상태: ${status}`);
+    } catch (err) {
+      appLog.error('main', `상주 agent 등록 실패: ${describeError(err)}`);
+    }
   }
 
   // Dock 아이콘도 없고(LSUIElement) 눈에 보이는 창도 없이 오래 떠있는
@@ -179,13 +207,14 @@ app.whenReady().then(() => {
   // 시간이 길어도 단축키 반응 속도가 떨어지지 않게 한다.
   powerSaveBlocker.start('prevent-app-suspension');
 
-  serviceCatalog.init();
   startPopupServer();
   initAutoUpdate();
   buildAppMenu();
-  // 로그인 때 자동으로 뜬 실행은 트레이만 띄우고 창은 열지 않는다 — 매번
-  // 부팅 직후 창이 화면을 가로채면 백그라운드 유틸리티라는 컨셉과 어긋난다.
-  if (!app.getLoginItemSettings().wasOpenedAtLogin) {
+  // 로그인 때 자동으로 뜬 실행(launchd `--role=resident`, 또는 옛 로그인 항목)은
+  // 트레이만 띄우고 창은 열지 않는다 — 매번 부팅 직후 창이 화면을 가로채면
+  // 백그라운드 유틸리티라는 컨셉과 어긋난다. launchd가 직접 exec하면
+  // wasOpenedAtLogin이 false로 오므로(Apple Event 없음) 역할 인자로 판단한다.
+  if (!LAUNCHED_BY_LAUNCHD && !app.getLoginItemSettings().wasOpenedAtLogin) {
     createMainWindow();
   }
   createTray();
@@ -208,25 +237,54 @@ app.on('child-process-gone', (_e, details) => {
   appLog.error('main', `자식 프로세스 종료: type=${details.type}, reason=${details.reason}, exitCode=${details.exitCode}`);
 });
 
-app.on('will-quit', () => {
-  appLog.info('main', '앱 종료');
-  serviceCatalog.dispose();
-  stopPopupServer();
+// 상주 스크립트 프로세스 그룹을 먼저 거둬야 한다(detached라 우리가 안 죽이면 고아로 남는다).
+// 정리가 비동기라 종료를 한 번 막는다. will-quit에서 막고 다시 app.quit()을 부르면 Electron이
+// 두 번째 요청을 무시해 프로세스가 영영 안 끝났다(e2e afterEach가 매번 30초 초과로 실제 확인).
+// 그래서 before-quit에서 막고, 정리가 끝나면 app.exit(0)으로 확정한다. 코드 0이라 launchd
+// KeepAlive(SuccessfulExit=false)도 다시 띄우지 않는다. 정리가 멈춰도 5초 뒤엔 끝낸다.
+let quitting = false;
+app.on('before-quit', (e) => {
+  if (quitting) return;
+  quitting = true;
+  e.preventDefault();
+  appLog.info('main', '앱 종료 — 실행기 정리 중');
+  const p = platform;
+  platform = null;
+  const done = () => {
+    stopPopupServer();
+    appLog.info('main', '앱 종료');
+    app.exit(0);
+  };
+  const guard = setTimeout(() => {
+    appLog.warn('main', '실행기 정리가 5초 안에 안 끝나 그대로 종료');
+    done();
+  }, 5000);
+  void (p ? p.shutdown() : Promise.resolve())
+    .catch((err) => appLog.error('main', `실행기 정리 실패: ${describeError(err)}`))
+    .finally(() => {
+      clearTimeout(guard);
+      done();
+    });
 });
 
-ipcMain.handle('services:list', () => serviceCatalog.list());
+const requirePlatform = (): Platform => {
+  if (!platform) throw new Error('플랫폼이 아직 준비되지 않음');
+  return platform;
+};
 
-ipcMain.handle('services:activate', (_e, id: string) => serviceCatalog.activate(id));
+ipcMain.handle('services:list', () => listServices(requirePlatform()));
 
-ipcMain.handle('services:deactivate', (_e, id: string) => serviceCatalog.deactivate(id));
+ipcMain.handle('services:activate', (_e, id: string) => activateService(requirePlatform(), id));
+
+ipcMain.handle('services:deactivate', (_e, id: string) => requirePlatform().disable(id));
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
 
-ipcMain.handle('theme:get', () => loadSettings().themePreference);
+ipcMain.handle('theme:get', () => themeOf(requirePlatform()));
 
 ipcMain.handle('theme:set', (_e, pref: ThemePreference) => {
   nativeTheme.themeSource = pref;
-  saveSettings({ themePreference: pref });
+  requirePlatform().settings.update({ theme: pref });
 });
 
 ipcMain.handle('theme:getEffectiveDark', () => nativeTheme.shouldUseDarkColors);

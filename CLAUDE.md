@@ -11,12 +11,12 @@
 ## 서비스 설계 원칙
 
 - 서비스 하나 = `resources/services/<id>/manifest.json` (스토어 설명) + `scripts/*.sh` (단축키 하나당 스크립트 하나).
-- 스크립트의 이름/단축키/설명은 `# @svc-name`, `# @svc-hotkey`, `# @svc-description` 헤더 주석에만 존재한다 — 별도 DB나 설정 파일을 만들지 않는다 (`electron/parser.ts` 참고).
+- 스크립트의 이름/설명은 `# @svc-name`, `# @svc-description` 헤더 주석에만 존재한다 — 별도 DB나 설정 파일을 만들지 않는다. 앱 시작 시 `modules/store/fromV1.ts`가 이 헤더를 읽어 v2 앱 패키지로 바꿔 보관소(`userData/apps/hackmac.<id>/`)에 넣는다. **`# @svc-hotkey`는 v2에서 무시된다** — 단축키는 앱이 고르지 않고 HackMac이 자리 풀(⌥1…⌥0, ⌥⇧1…)에서 배정한다(`modules/hotkey/slots.ts`, [docs/hackmac-v2-manifest.md](docs/hackmac-v2-manifest.md) 3.3.1). 카피에 키 조합을 직접 쓰지 말고 `(Alt+1)`처럼 쓴 것은 변환기가 `{hotkey:<key>}`로 바꾼다.
 - **스크립트가 사용자와 상호작용해야 하는 순간(목록에서 고르기, 텍스트 입력받기, 확인받기)은 osascript의 `choose from list`/`display dialog`로 직접 그리지 않는다 — HackMac 앱에게 그려달라고 요청한다.** "완성된 서비스를 켜고 끄는 제품"이라는 이 앱의 정체성상, 사용자가 보는 화면은 팝업까지 포함해 전부 [docs/design.md](docs/design.md)에 정의된 하나의 디자인 시스템을 따라야 한다 — macOS 기본 다이얼로그의 각지고 이질적인 룩을 그대로 노출하면 안 된다. 방법: 스크립트는 `"$HACKMAC_POPUP" select|prompt|confirm ...`(`resources/bin/hackmac-popup`)를 호출해 표준입력으로 선택/입력값을 돌려받는다. 이 호출은 로컬 유닉스 소켓(`electron/popupServer.ts`)을 거쳐 이미 실행 중인 HackMac 앱이 Electron 팝업 창(`electron/popupWindow.ts` + `src/popup/`)을 띄우는 것으로 이어진다. **이건 서비스를 "감싸는" 새로운 레이어가 아니라, 원래 osascript가 하던 여러 역할 중 딱 하나(다이얼로그 렌더링)만 앱에 위임하는 것이다** — Reminders 조회/수정, 시간 계산, 알림 표시 등 나머지 업무 로직은 여전히 스크립트(및 그 안의 osascript) 소유다. 부수 효과로, 여러 다이얼로그를 순서대로 띄우는 스크립트에서 매번 `activate`를 재호출해야 했던 AppleScript 포커스 문제(아래 "환경에서 겪은 것들" 참고)가 사라진다 — 포커스는 이제 Electron 창의 `show()/focus()`가 책임진다. 정보 표시만 하고 상호작용이 없는 `display notification`은 그대로 둔다(팝업이 아니라 배너라 이 규칙 대상이 아님).
 - **`manifest.json`의 카피(`tagline`/`whatItIs`/`differentiators`/`strengths`/`usage`)를 새로 쓰거나 고칠 때는 매번 `/copywriting` 스킬을 호출하고, [docs/service-copy-guide.md](docs/service-copy-guide.md)를 읽은 뒤 쓴다.** 이 페이지는 랜딩페이지가 아니라 이미 설치한 사용자가 효용을 체감하고 실제로 쓸 수 있게 돕는 페이지라, `/copywriting`의 일반 마케팅 카피 기준을 `docs/service-copy-guide.md`가 이 프로덕트에 맞게 어떻게 바꿔 쓰는지까지 함께 봐야 한다 — 스킬만 보고 일반 랜딩페이지 공식(소셜 프루프, CTA 버튼 카피, 가격 섹션 등)을 그대로 적용하지 않는다.
-- 번들 리소스는 런타임에 바뀌지 않으므로 `electron/services.ts`는 앱 시작 시 1회만 스캔한다. 개발 중 스크립트/매니페스트를 고치면 `npm run dev`를 재시작해야 반영된다.
+- 번들 서비스는 보관소에 **이미 설치돼 있으면 다시 넣지 않는다**(`Platform.installBundledV1`). 개발 중 스크립트/매니페스트를 고쳤다면 `npm run dev` 재시작만으로는 반영되지 않는다 — `userData/apps/hackmac.<id>/`를 지우고 재시작한다. (번들 버전이 올라가면 새 버전으로 넣는 처리는 아직 없다.)
 - **Reminders/Calendar/Notes 같은 Apple 기본 앱에서 제목/완료 여부/마감일/메모 같은 기본 필드를 넘어서는 데이터(첨부파일, 리치 링크, 폴더 구조 등)를 읽는 스크립트를 새로 만들 때는, 코드를 짜기 전에 [docs/apple-app-data-access-guide.md](docs/apple-app-data-access-guide.md)의 사전 진단 체크리스트부터 실행한다.** 공개 API가 애초에 노출하지 않는 데이터를 공개 API로 찾으려다 데이터 형식 오해 → API 한계 → 성능 → 툴체인 → 권한 문제를 층층이 다시 겪는 실수를 반복하지 않기 위함이다.
-- **스크립트는 판단 지점마다(입력값 확인, 조회 결과 개수, 분기 선택 등) stdout/stderr(AppleScript면 `log "..."`)로 남긴다.** `electron/runner.ts`가 모든 실행의 stdout/stderr를 그 실행 전용 로그 파일(`~/Library/Logs/HackMac/<서비스id>/<날짜>/*.log`, `electron/exec-log.ts` 참고)에 자동으로 담아주므로, 스크립트 작성자가 따로 로그 파일을 만들 필요는 없고 이 습관만 지키면 된다 — 안 하면 실패했을 때 "무엇을 하다가" 실패했는지 실행 로그만 봐선 알 수 없다.
+- **스크립트는 판단 지점마다(입력값 확인, 조회 결과 개수, 분기 선택 등) stdout/stderr(AppleScript면 `log "..."`)로 남긴다.** `modules/runner/runner.ts`가 모든 실행의 stdout/stderr를 그 실행 전용 로그 파일(`~/Library/Logs/HackMac/<앱id>/<날짜>/*.log`, `modules/runner/execlog.ts` 참고)에 자동으로 담아주므로, 스크립트 작성자가 따로 로그 파일을 만들 필요는 없고 이 습관만 지키면 된다 — 안 하면 실패했을 때 "무엇을 하다가" 실패했는지 실행 로그만 봐선 알 수 없다.
 
 ## Required Commands
 
@@ -73,13 +73,18 @@ npm run release       # test:e2e 통과가 전제 + dist와 동일 + GitHub Rele
 ## Architecture
 
 ```
-electron/main.ts        ─ 창 생성, 트레이, IPC 핸들러, 로그인 시 자동 실행 등록
-electron/services.ts    ─ resources/services 스캔 → 서비스 카탈로그, 켜기/끄기 상태 관리
-electron/parser.ts      ─ .sh 헤더 주석(@svc-*) ↔ ServiceShortcut 변환
-electron/runner.ts      ─ 스크립트 실행 (/bin/zsh)
-electron/hotkeys.ts     ─ 전역 단축키 클레임 소유권 추적 (HotkeyRegistrar)
-electron/settings.ts    ─ 켜진 서비스 id 목록 userData/settings.json 영속화
-electron/updater.ts     ─ GitHub Releases 기반 자동 업데이트 (electron-updater)
+electron/main.ts         ─ 창 생성, 트레이, IPC 핸들러, --role 판단, 상주 agent(SMAppService) 등록, 종료 시 실행기 정리
+electron/platformHost.ts ─ 플랫폼 모듈에 Electron 것(globalShortcut, 팝업 env, 알림)을 주입, v1 설정 이전, AppView → ServiceMeta
+electron/exec-log.ts     ─ 로그 폴더 위치와 오래된 실행 로그 정리
+electron/updater.ts      ─ GitHub Releases 기반 자동 업데이트 (electron-updater)
+modules/platform/        ─ 보관소·자리·실행기·원장·설정을 잇는 오케스트레이터 (Electron 없이 vitest로 시험)
+modules/store/           ─ 앱 보관소(버전 폴더·current) + v1 서비스 → v2 패키지 변환기
+modules/hotkey/slots.ts  ─ 단축키 자리 풀과 배정
+modules/runner/          ─ 1회 실행·상주 감독·cron·실행 로그
+modules/ledger/          ─ 추가 전용 JSONL 사건 원장
+modules/settings/        ─ v2 settings.json(안전 쓰기, 깨진 파일 사본)
+shared/manifest.ts       ─ v2 앱 선언 타입과 검증
+build/launchd/           ─ 상주 agent plist (electron-builder extraFiles로 Contents/Library/LaunchAgents에 들어감)
 electron/preload.ts     ─ contextBridge로 window.playbook / window.hackmacPopup API 노출
 electron/popupServer.ts ─ 스크립트 ↔ 팝업 창을 잇는 로컬 유닉스 소켓 서버
 electron/popupWindow.ts ─ 선택/입력/확인 팝업 BrowserWindow 생성·직렬화
@@ -99,7 +104,7 @@ src/popup/              ─ 팝업 창 전용 화면(PopupApp.tsx) — index.htm
 
 - **`ELECTRON_RUN_AS_NODE=1`이 이 셸 환경에 기본으로 걸려 있다.** `electron .`을 직접 실행하면 Electron이 아니라 그냥 Node로 켜져서 앱이 안 뜬다. `npm run dev`(vite-plugin-electron이 자동으로 이 변수를 지움)는 문제없다.
 - **Electron 렌더러는 `window.prompt()`를 지원하지 않는다** — 호출하면 다이얼로그 없이 바로 `null`. `alert()`/`confirm()`은 지원된다.
-- **`globalShortcut.register()`는 같은 프로세스 안에서 두 번째 호출이 첫 번째를 조용히 덮어쓴다.** 실패를 반환하지 않으므로 반드시 `electron/hotkeys.ts`의 `HotkeyRegistrar`처럼 등록을 한 곳에 모아 클레임 결과를 직접 추적해야 한다.
+- **`globalShortcut.register()`는 같은 프로세스 안에서 두 번째 호출이 첫 번째를 조용히 덮어쓴다.** 실패를 반환하지 않으므로 반드시 등록을 한 곳에 모아 소유를 직접 추적해야 한다. v2에서는 `modules/hotkey/slots.ts`가 자리마다 주인을 하나만 두고, 실제 등록은 `Platform`만 한다 — `globalShortcut.register()`를 다른 곳에서 직접 부르지 말 것.
 - **`display dialog`/`choose from list`는 그 다이얼로그가 뜨기 바로 직전에 `activate`를 호출해야 첫 클릭부터 먹는다.** 스크립트 맨 앞에서 한 번만 `activate`하면, 그 뒤에 다른 앱(Reminders 등)으로 Apple Event를 보내는 `tell application "..."` 블록이 하나라도 끼는 순간 포커스가 흐트러져서, 다음 다이얼로그의 첫 클릭이 선택이 아니라 포커스 뺏기로만 소비된다(mac-shortcut-manager commit `a43dac1`에서 실사용자 리포트로 발견됨). 이 프로젝트의 GTD 서비스 스크립트들은 이제 위 "서비스 설계 원칙"에 따라 사람과의 상호작용을 osascript 다이얼로그가 아니라 `$HACKMAC_POPUP`(Electron 창)로 그리므로 이 문제 자체를 겪지 않는다 — 포커스는 `electron/popupWindow.ts`의 `show()/focus()`가 책임진다. 이 교훈은 osascript `display dialog`/`choose from list`를 그대로 쓰는 다른 프로젝트(mac-shortcut-manager)나, 이 앱에서 앞으로 osascript 다이얼로그를 직접 쓸 일이 생겼을 때를 위해 남겨둔다.
 - **osascript로 스크립트를 stdin(heredoc)으로 넘기면서 인자도 같이 줄 때는 `osascript - "$1" <<'EOF'`처럼 `-`를 반드시 붙여야 한다.** `-` 없이 쓰면 `"$1"`을 stdin 스크립트가 아니라 열어야 할 **파일 경로**로 오인해서 "No such file or directory" 에러가 나고, heredoc 내용은 조용히 무시된다.
 - **Reminders/Notes/Calendar 앱을 `osascript`로 다루면 그 앱을 대상으로 한 최초의 Apple Event에서 macOS 자동화 권한 승인 창이 뜨고, 사용자가 직접 클릭할 때까지 그 `osascript` 프로세스가 무기한 블록된다.** 자동화로 이 창을 감지·클릭할 방법이 없다 — 터미널에서 검증할 때 백그라운드로 돌리고 타임아웃을 걸어야 한다. GTD 서비스 스크립트를 처음 실행하면 이 승인 창이 뜬다는 걸 사용법 안내에 포함해두는 게 좋다.

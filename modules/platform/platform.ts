@@ -32,6 +32,11 @@ export interface PlatformOptions {
   capabilityEnv: () => Record<string, string>;
   hotkeys: HotkeyPort;
   hackmacVersion: string;
+  /** 단축키 실행의 앞뒤(실행 중 표시, 실패 알림). 호출자가 화면을 그린다 */
+  hooks?: {
+    onHotkeyRunStart?: (appId: string, trigger: Extract<Trigger, { kind: 'hotkey' }>) => void;
+    onHotkeyRunEnd?: (appId: string, trigger: Extract<Trigger, { kind: 'hotkey' }>, result: RunResult) => void;
+  };
   now?: () => Date;
   /** 시험용 실행기 옵션 */
   runner?: Partial<ConstructorParameters<typeof Runner>[0]>;
@@ -120,6 +125,8 @@ export class Platform {
   }
 
   private readonly problems = new Map<string, string[]>();
+  /** 지금 돌고 있는 단축키 트리거(appId/key) */
+  private readonly busy = new Set<string>();
 
   private fillCopy(m: AppManifest, appId: string, a: Assignments): AppManifest {
     const f = (s: string) => fillHotkeys(s, a, appId);
@@ -164,7 +171,18 @@ export class Platform {
     const ctx = () => this.context(appId, m);
     for (const t of hotkeyTriggers) {
       const accel = assigned[slotId(appId, t.key)];
-      if (this.o.hotkeys.register(accel, () => void this.runner.runOnce(ctx(), t))) accelerators.push(accel);
+      const owner = slotId(appId, t.key);
+      const fire = () => {
+        // 사람이 "안 눌렸나" 하고 같은 키를 다시 누르면 같은 스크립트가 겹쳐 돈다(v1 실사용 로그). 끝나기 전 재입력은 버린다
+        if (this.busy.has(owner)) return;
+        this.busy.add(owner);
+        this.o.hooks?.onHotkeyRunStart?.(appId, t);
+        void this.runner.runOnce(ctx(), t).then((r) => {
+          this.busy.delete(owner);
+          this.o.hooks?.onHotkeyRunEnd?.(appId, t, r);
+        });
+      };
+      if (this.o.hotkeys.register(accel, fire)) accelerators.push(accel);
       else problems.push(`${t.name}: 단축키 ${accel}를 다른 프로그램이 쓰고 있음`);
     }
     const resident = m.triggers.find((t): t is Extract<Trigger, { kind: 'resident' }> => t.kind === 'resident');

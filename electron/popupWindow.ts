@@ -131,9 +131,9 @@ function showInWindow(win: BrowserWindow): void {
 
 // 단축키를 누른 직후부터 스크립트의 첫 실제 팝업(또는 종료)까지 화면에
 // 아무 피드백이 없으면, 사람이 "안 눌렸나" 하고 단축키를 다시 눌러 같은
-// 서비스가 중복 실행되는 문제로 이어졌다(electron/services.ts의 실행 로그로
+// 서비스가 중복 실행되는 문제로 이어졌다(electron/platformHost.ts의 실행 로그로
 // 실제로 확인됨). 이 창은 그 공백을 메우는 "지금 실행 중" 표시로, 스크립트가
-// 아니라 electron/services.ts가 단축키 콜백에서 직접 띄우고 닫는다 — 위
+// 아니라 electron/platformHost.ts가 단축키 콜백에서 직접 띄우고 닫는다 — 위
 // `queue` 직렬화 대상이 아닌 별도 생명주기다.
 let statusWin: BrowserWindow | null = null;
 

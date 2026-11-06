@@ -78,6 +78,20 @@ describe('Platform', () => {
     expect(p.ledger.read().map((e) => e.kind)).toEqual(['app.installed', 'app.enabled', 'run.start', 'run.end']);
   });
 
+  it('단축키 실행 중 같은 키를 다시 누르면 버리고, 앞뒤 훅을 부른다', async () => {
+    const seen: string[] = [];
+    const p = platform({ hooks: { onHotkeyRunStart: (id) => seen.push(`start:${id}`), onHotkeyRunEnd: (id, _t, r) => seen.push(`end:${id}:${r.success}`) } });
+    p.install(makePkg('a'));
+    p.enable('jiho.t');
+    registered.get('Alt+1')!();
+    registered.get('Alt+1')!();
+    await until(() => seen.length === 2);
+    expect(seen).toEqual(['start:jiho.t', 'end:jiho.t:true']);
+    expect(p.ledger.read({ kind: 'run.start' })).toHaveLength(1);
+    registered.get('Alt+1')!();
+    await until(() => seen.length === 4);
+  });
+
   it('끄면 자리를 돌려주고 기억해 둔다. 다시 켜면 같은 자리', async () => {
     const p = platform();
     p.install(makePkg('a'));
