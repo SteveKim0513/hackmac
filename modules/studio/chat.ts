@@ -24,6 +24,10 @@ export interface ChatDeps {
   accountLabel: (accountId: string) => string;
   /** 그 계정으로 CLI를 쓸 수 있으면 실행 정보(그 계정의 설정 폴더 환경 포함), 로그인 안 돼 있으면 null */
   engineFor: (vendor: Vendor, accountId: string) => EngineHandle | null;
+  /** 기억(계획서 12.2)이 최신이면 새 세션에 넣을 글. null이면 평소처럼 세션을 이어 연다 */
+  memoryContext?: (threadId: string) => string | null;
+  /** 레시피(12.3)를 붙여넣은 첫 글이면 빈칸만 채우는 짧은 모드로 간다 */
+  recipe?: { detect: (text: string) => boolean; instructions: string; title: (text: string) => string | null };
   /** 진행 중인 대화를 다른 계정으로 옮길 때 세션 기록을 복사한다(modules/account/session.ts) */
   copySession: (vendor: Vendor, fromAccountId: string, toAccountId: string, session: string) => { ok: true } | { ok: false; detail: string };
   instructions: string;
@@ -79,17 +83,29 @@ export class Chats {
       return { ok: false, reason: `이 앱은 ${name}(으)로 만들기 시작했어요. 그 계정에 다시 로그인하거나, 위에서 같은 회사의 다른 계정으로 옮겨 주세요` };
     }
 
+    const isFirst = this.d.threads.messages(threadId).length === 0;
+    // 레시피를 붙여넣은 첫 글이면 이 스레드는 짧은 모드다(다시 열어도 유지)
+    if (!meta.recipe && isFirst && this.d.recipe?.detect(body)) {
+      meta.recipe = true;
+      this.d.threads.update(threadId, { recipe: true });
+    }
     let conv = this.live.get(threadId);
+    let usedMemory = false;
     if (!conv || !conv.alive) {
+      const x = this.extras(threadId, meta.recipe === true);
+      usedMemory = x.usedMemory;
+      // 기억이 최신이면 --resume 대신 새 세션에 기억을 넣는다(계획서 12.2). 컨텍스트가 길어지지 않고 계정·회사를 바꿔도 이어진다
+      if (x.usedMemory) this.d.threads.update(threadId, { session: null });
       try {
-        conv = await this.open(threadId, vendor, engine, meta.session);
+        conv = await this.open(threadId, vendor, engine, x.usedMemory ? null : meta.session, x.text);
       } catch (err) {
         return { ok: false, reason: `엔진을 열지 못했어요: ${(err as Error).message}` };
       }
     }
     if (!meta.vendor || !meta.account) this.d.threads.update(threadId, { vendor, account: accountId });
-    // 제목을 따로 묻지 않는다: 첫 글의 앞부분이 제목이 된다(나중에 요구 정리가 끝나면 앱 이름으로 바뀐다)
-    if (meta.title === NEW_TITLE && this.d.threads.messages(threadId).length === 0) this.d.threads.update(threadId, { title: titleFrom(body) });
+    // 제목을 따로 묻지 않는다: 첫 글의 앞부분이 제목이 된다(나중에 요구 정리가 끝나면 앱 이름으로 바뀐다). 레시피는 목표 한 줄
+    if (meta.title === NEW_TITLE && isFirst) this.d.threads.update(threadId, { title: (meta.recipe && this.d.recipe?.title(body)) || titleFrom(body) });
+    if (usedMemory) this.notice(threadId, '이 앱의 기억을 불러와서 이어 갈게요. 지금까지 나눈 글은 그대로 남아 있어요.');
     const msg = this.d.threads.append(threadId, { role: 'user', text: body });
     this.d.onEvent(threadId, { kind: 'message', message: msg });
     conv.send(body);
@@ -99,19 +115,25 @@ export class Chats {
     return { ok: true };
   }
 
-  private async open(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null): Promise<Conversation> {
+  private async open(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null, addendum: string): Promise<Conversation> {
     try {
-      return await this.openOnce(threadId, vendor, engine, resume);
+      return await this.openOnce(threadId, vendor, engine, resume, addendum);
     } catch (err) {
       if (!resume) throw err;
       // 이어 열기가 안 됐다(세션 기록이 이 계정 폴더에 없거나 못 읽는다). 새 대화로 시작하되 사용자에게 알린다
       this.d.threads.update(threadId, { session: null });
       this.notice(threadId, '이전 대화의 맥락을 이어 열지 못해 새 대화로 시작해요. 지금까지 나눈 글은 그대로 남아 있어요.');
-      return this.openOnce(threadId, vendor, engine, null);
+      return this.openOnce(threadId, vendor, engine, null, addendum);
     }
   }
 
-  private async openOnce(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null): Promise<Conversation> {
+  /** 지시문 뒤에 붙일 것: 레시피 모드 지시 + (최신이면) 기억 */
+  private extras(threadId: string, recipe: boolean): { text: string; usedMemory: boolean } {
+    const mem = this.d.memoryContext?.(threadId) ?? null;
+    return { text: [recipe && this.d.recipe ? this.d.recipe.instructions : '', mem ?? ''].filter(Boolean).join('\n\n'), usedMemory: mem !== null };
+  }
+
+  private async openOnce(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null, addendum: string): Promise<Conversation> {
     const create = this.d.create ?? defaultCreate;
     // 실제 경로로 넘긴다: Claude의 Write(./**) 규칙은 링크가 낀 경로(/var → /private/var)에서 작업 폴더 안 쓰기까지 막았다(실측)
     const cwd = realpathSync(this.d.threads.workDir(threadId));
@@ -120,7 +142,7 @@ export class Chats {
       bin: engine.bin,
       cwd,
       ...(resume ? { resume } : {}),
-      instructions: this.d.instructions,
+      instructions: addendum ? `${this.d.instructions}\n\n${addendum}` : this.d.instructions,
       ...(this.d.allowedTools ? { allowedTools: this.d.allowedTools } : {}),
       ...extra,
       env: { ...engine.env, ...(extra.env ?? {}) },
@@ -213,7 +235,7 @@ export class Chats {
       return;
     }
     try {
-      const conv = await this.openOnce(threadId, vendor, engine, null);
+      const conv = await this.openOnce(threadId, vendor, engine, null, this.extras(threadId, meta.recipe === true).text);
       conv.send(text);
       this.d.onEvent(threadId, { kind: 'state', busy: true });
     } catch (err) {

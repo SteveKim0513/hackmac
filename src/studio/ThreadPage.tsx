@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { VENDOR_LABEL, type AccountsView, type BuildState, type Message, type ReqStatus, type ThreadMeta } from '../../shared/studio';
+import { VENDOR_LABEL, type AccountsView, type BuildState, type Message, type RecipeView, type ReqStatus, type ThreadMeta } from '../../shared/studio';
+import { RecipeDialog } from './RecipeDialog';
 
 interface Props {
   threadId: string;
@@ -30,6 +31,8 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<AccountsView | null>(null);
+  const [recipe, setRecipe] = useState<Extract<RecipeView, { ok: true }> | null>(null);
+  const [recipeBusy, setRecipeBusy] = useState(false);
   const [build, setBuild] = useState<BuildState | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const startedAt = useRef<number | null>(null);
@@ -88,10 +91,20 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
     }
   };
 
+  const makeRecipe = async () => {
+    setRecipeBusy(true);
+    setNotice(null);
+    const r = await window.studio.makeRecipe(threadId);
+    setRecipeBusy(false);
+    if (r.ok) setRecipe(r);
+    else setNotice(r.error);
+  };
+
   const elapsed = startedAt.current ? Math.floor((Date.now() - startedAt.current) / 1000) : 0;
 
   return (
     <div className="thread-page">
+      {recipe && <RecipeDialog recipe={recipe} onClose={() => setRecipe(null)} />}
       <aside className="thread-status">
         <button className="back-button" onClick={onBack}>
           ‹ 홈
@@ -122,6 +135,11 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
                 ))}
             </select>
           </label>
+        )}
+        {messages.some((m) => m.role === 'user') && (
+          <button className="header-button recipe-button" data-make-recipe disabled={busy || recipeBusy} onClick={() => void makeRecipe()}>
+            {recipeBusy ? '레시피 만드는 중…' : '레시피 만들기'}
+          </button>
         )}
         <ol className="step-list">
           {STEPS.map((label, i) => {
@@ -201,6 +219,7 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
           {messages.length === 0 && !streaming && (
             <div className="chat-empty">
               <p>맥에서 하고 싶은 일을 편하게 말해 주세요.</p>
+              <p className="muted">다른 사람이 보낸 레시피가 있으면 여기에 그대로 붙여넣으세요.</p>
               <p className="muted">예: "회의 10분 전에 화면 가운데 크게 알려 줘", "메뉴바에 내 주식 3개 시세 띄워 줘"</p>
             </div>
           )}

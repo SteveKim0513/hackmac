@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { BundlePick, MaintenanceView } from '../shared/studio';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
-import type { AccountsView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
+import type { AccountsView, RecipeView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -60,6 +60,7 @@ const studioApi = {
   thread: (id: string): Promise<ThreadView | null> => ipcRenderer.invoke('threads:get', id),
   send: (id: string, text: string): Promise<SendResult> => ipcRenderer.invoke('chat:send', id, text),
   interrupt: (id: string): Promise<void> => ipcRenderer.invoke('chat:interrupt', id),
+  makeRecipe: (threadId: string): Promise<RecipeView> => ipcRenderer.invoke('recipe:make', threadId),
   build: (id: string): Promise<BuildState | null> => ipcRenderer.invoke('build:get', id),
   onBuild: (cb: (threadId: string, s: BuildState) => void): (() => void) => {
     const h = (_e: unknown, p: { threadId: string; state: BuildState }) => cb(p.threadId, p.state);

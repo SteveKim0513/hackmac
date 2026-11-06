@@ -20,6 +20,8 @@ export interface ThreadMeta {
   vendor: Vendor | null;
   /** 이 스레드가 쓰는 계정 id(modules/account/accounts.ts). 같은 회사 안에서 사용자가 옮길 수 있다. 옛 스레드엔 없다 */
   account?: string | null;
+  /** 레시피를 붙여넣어 시작한 스레드(빈칸만 채우는 짧은 모드, modules/recipe). 다시 열어도 그 모드를 유지한다 */
+  recipe?: boolean;
   /** 엔진 세션(Claude 세션 / Codex thread) 번호. 이어 열 때 쓴다 */
   session: string | null;
   /** 완성돼 보관소에 들어간 앱 id */
@@ -85,7 +87,7 @@ export class ThreadStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  update(id: string, patch: Partial<Pick<ThreadMeta, 'title' | 'vendor' | 'account' | 'session' | 'appId'>>): ThreadMeta {
+  update(id: string, patch: Partial<Pick<ThreadMeta, 'title' | 'vendor' | 'account' | 'recipe' | 'session' | 'appId'>>): ThreadMeta {
     const m = this.get(id);
     if (!m) throw new Error(`없는 스레드: ${id}`);
     const next = { ...m, ...patch, updatedAt: this.now().toISOString() };

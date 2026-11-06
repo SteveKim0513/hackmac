@@ -668,3 +668,36 @@
   color: var(--text-dim);
   font-size: 12.5px;
 }
+
+/* ── 레시피 ───────────────────────────── */
+.recipe-button {
+  margin: 0 0 16px;
+}
+
+.recipe-card {
+  max-width: 640px;
+}
+
+.recipe-text {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  user-select: text;
+}
+
+.recipe-ref {
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.recipe-copied {
+  align-self: center;
+}

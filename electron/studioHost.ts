@@ -21,13 +21,16 @@ import { createInstalls, type InstallView } from '../modules/prepare/install';
 import type { Platform } from '../modules/platform/platform';
 import { agentOptions, builderInstructions, type AgentPaths } from '../modules/build/agent';
 import { Builder } from '../modules/build/builder';
-import type { BuildState } from '../modules/build/progress';
+import { ProgressLog, type BuildState } from '../modules/build/progress';
+import { Compactor } from '../modules/memory/compactor';
+import { compress, isCurrent, MemoryStore, renderForSession } from '../modules/memory/memory';
+import { buildRecipe, parseRecipe, recipeInstructions, recipeTitle } from '../modules/recipe/recipe';
 import { askOnce } from '../modules/conversation/once';
 import { Chats, type ChatEvent } from '../modules/studio/chat';
 import { readPackage } from '../modules/store/store';
 import { ThreadStore, type ThreadMeta } from '../modules/thread/thread';
 import { CAPABILITIES } from './platformHost';
-import type { AccountsView, AccountView, ThreadView, VendorView } from '../shared/studio';
+import type { AccountsView, AccountView, RecipeView, ThreadView, VendorView } from '../shared/studio';
 import { appLog, describeError } from './log';
 import { agentDocs, buildClientJsPath, buildWrapperPath, popupStubPath } from './paths';
 
@@ -205,12 +208,61 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
     return b;
   };
 
+  // ── 기억 압축·레시피(12.2·12.3) ─────────────────
+  const memory = new MemoryStore((id) => threads.dirOf(id));
+  /** 그 스레드의 대화를 기억 파일로 압축한다. 엔진은 한 번 쓰고 닫는다(도구 없음) */
+  const compressThread = async (threadId: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const meta = threads.get(threadId);
+    if (!meta) return { ok: false, error: '없는 스레드예요' };
+    // 처음 쓴 회사의 계정을 우선, 로그인이 풀렸으면 다른 곳으로(한 번 쓰고 닫는 요약이라 회사가 섞여도 된다)
+    const order: [Vendor, string][] = [
+      ...(meta.vendor ? ([[meta.vendor, meta.account ?? accounts.activeId(meta.vendor)]] as [Vendor, string][]) : []),
+      ...VENDORS.map((v): [Vendor, string] => [v, accounts.activeId(v)]),
+    ];
+    const pick = order.map(([v, a]) => ({ v, e: engineFor(v, a) })).find((x) => x.e);
+    if (!pick?.e) return { ok: false, error: '기억을 정리할 AI 계정이 로그인돼 있지 않아요' };
+    const eng = pick.e;
+    let manifestReferences: { repo: string; commit: string; path: string; borrowed: string; license: string }[] = [];
+    const dir = meta.appId ? platform.store.currentDir(meta.appId) : null;
+    const pkg = dir ? readPackage(dir) : null;
+    if (pkg?.ok) manifestReferences = pkg.manifest.references.map((r) => ({ repo: r.repo, commit: r.commit, path: r.path ?? '', borrowed: r.borrowed, license: r.license }));
+    const r = await compress(
+      {
+        messages: threads.messages(threadId),
+        previous: memory.read(threadId),
+        requirements: new ProgressLog(path.join(threads.dirOf(threadId), 'progress.jsonl')).state().requirements.map((q) => ({ id: q.id, text: q.text, status: q.status })),
+        manifestReferences,
+      },
+      {
+        ask: async (prompt) => {
+          const tmp = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'hackmac-mem-')));
+          try {
+            return await askOnce(pick.v, { bin: eng.bin, cwd: tmp, env: eng.env, allowedTools: [] }, prompt);
+          } finally {
+            rmSync(tmp, { recursive: true, force: true });
+          }
+        },
+      },
+    );
+    if (!r.ok) return r;
+    memory.write(threadId, r.memory);
+    appLog.info('studio', `스레드 ${threadId} 기억 압축: 대화 ${r.memory.basedOn.messages}개 → 요구사항 ${r.memory.requirements.length}, 결정 ${r.memory.decisions.length}, 환경 ${r.memory.environment.length}, 참고 ${r.memory.references.length}`);
+    return { ok: true };
+  };
+
   const chats = new Chats({
     threads,
     defaultVendor: () => {
       const saved = platform.settings.get().engine;
       return saved && statuses?.get(accounts.activeId(saved))?.loggedIn ? saved : null;
     },
+    // 기억이 대화를 다 반영하면 --resume 대신 새 세션에 기억과 최근 몇 턴을 넣는다(12.2)
+    memoryContext: (id) => {
+      const msgs = threads.messages(id);
+      const m = memory.read(id);
+      return isCurrent(m, msgs) ? renderForSession(m, msgs) : null;
+    },
+    recipe: { detect: (t) => parseRecipe(t) !== null, instructions: recipeInstructions, title: recipeTitle },
     activeAccount: (v) => accounts.activeId(v),
     accountLabel: (id) => accounts.get(id)?.label ?? '삭제된 계정',
     engineFor,
@@ -302,6 +354,36 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
 
   void view(true).catch((err) => appLog.error('studio', `엔진 감지 실패: ${describeError(err)}`));
 
+  // 대화가 끝나고 30분 뒤 압축한다(바뀐 게 없으면 안 한다 — 한도 보호). 1분마다 한 스레드씩
+  const compactor = new Compactor({
+    threadIds: () => threads.list().map((t) => t.id),
+    messages: (id) => threads.messages(id),
+    memory: (id) => memory.read(id),
+    busy: (id) => chats.busy(id),
+    compress: compressThread,
+    onFail: (id, e) => appLog.warn('studio', `스레드 ${id} 기억 압축 실패: ${e}`),
+  });
+  const compactTimer = setInterval(() => void compactor.tick(), 60_000);
+  compactTimer.unref();
+
+  // 레시피 만들기: 기억이 최신이 아니면 먼저 압축한다(오래 걸릴 수 있다). 레시피는 코드가 기억에서 뽑는다
+  ipcMain.handle('recipe:make', async (_e, id: string): Promise<RecipeView> => {
+    const threadId = String(id);
+    if (!threads.get(threadId)) return { ok: false, error: '없는 스레드예요' };
+    const msgs = threads.messages(threadId);
+    if (!msgs.some((m) => m.role === 'user')) return { ok: false, error: '아직 대화가 없어요. 만들고 싶은 것을 말한 뒤에 레시피를 만들 수 있어요' };
+    let m = memory.read(threadId);
+    if (!isCurrent(m, msgs)) {
+      const r = await compressThread(threadId);
+      if (!r.ok) return { ok: false, error: r.error };
+      m = memory.read(threadId);
+    }
+    if (!m) return { ok: false, error: '기억을 읽지 못했어요' };
+    const r = buildRecipe(m);
+    appLog.info('studio', `스레드 ${threadId} 레시피 생성: 빈칸 ${r.blanks.length}, 참고 ${r.references.length}, 경고 ${r.warnings.length}`);
+    return { ok: true, goal: m.goal, text: r.text, blanks: r.blanks, references: r.references.map((x) => ({ text: x.text, readOnly: x.readOnly })), warnings: r.warnings };
+  });
+
   const threadOf = (appId: string) => threads.list().find((t) => t.appId === appId) ?? null;
   const services: StudioServices = {
     pickEngine: () => {
@@ -326,12 +408,15 @@ export function startStudio(platform: Platform): { stop: () => Promise<void>; se
     },
     memoryOfApp: (appId) => {
       const t = threadOf(appId);
+      const mem = t ? memory.read(t.id) : null;
+      if (t && mem) return renderForSession(mem, threads.messages(t.id), 4);
       return t ? threads.messages(t.id).filter((m) => m.role !== 'notice').slice(-12).map((m) => `${m.role === 'user' ? '사용자' : '도우미'}: ${m.text}`).join('\n\n') : '(이 앱은 작업실에서 만들지 않았어요)';
     },
   };
 
   return {
     stop: async () => {
+      clearInterval(compactTimer);
       for (const b of builders.values()) b.stop();
       await chats.stopAll();
     },

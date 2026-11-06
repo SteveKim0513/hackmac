@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Vendor } from '../account/cli.ts';
-import { createConversation } from '../conversation/index.ts';
+import { createConversation, type ConversationOptions } from '../conversation/index.ts';
+import { buildRecipe, parseRecipe, recipeInstructions, recipeTitle } from '../recipe/recipe.ts';
+import { normalizeMemory } from '../memory/memory.ts';
 import { ThreadStore } from '../thread/thread.ts';
 import { Chats, titleFrom, type ChatEvent } from './chat.ts';
 
@@ -216,5 +218,75 @@ describe('Chats', () => {
     expect(await chats.send(t.id, '이어서')).toEqual({ ok: true });
     await until(() => threads.messages(t.id).some((m) => m.text === 'echo:이어서'));
     expect(threads.messages(t.id).some((m) => m.role === 'notice' && m.text.includes('새 대화로 시작해요'))).toBe(true);
+  });
+});
+
+describe('Chats: 기억(12.2)과 레시피(12.3)', () => {
+  let opened: ConversationOptions[];
+  let memoryText: string | null;
+  const makeWith = () =>
+    new Chats({
+      threads, defaultVendor: () => 'claude', activeAccount: (v) => active[v], accountLabel: (id) => id,
+      engineFor: () => ({ bin: process.execPath, env: { ...process.env } as Record<string, string> }),
+      copySession: () => ({ ok: true }), instructions: '기본 지시', onEvent: (id, e) => events.push({ id, e }),
+      memoryContext: () => memoryText,
+      recipe: { detect: (t) => parseRecipe(t) !== null, instructions: recipeInstructions, title: recipeTitle },
+      create: (v, o) => { opened.push(o); return createConversation(v, { ...o, prefixArgs: [join(FIXTURES, `fake-${v}.mjs`)] }); },
+    });
+  const recipeText = buildRecipe(normalizeMemory({ goal: '메뉴바에 시계를 보여 준다', requirements: [{ id: 'R1', text: '시계를 보여 준다' }], environment: [{ fact: '내 시간대는 서울', blank: '시간대' }] }, { messages: 1, lastAt: null }, new Date())!).text;
+
+  beforeEach(() => { opened = []; memoryText = null; });
+
+  it('레시피를 붙여넣은 첫 글이면 짧은 모드: 지시가 붙고, 제목은 목표 한 줄, 다시 열어도 유지된다', async () => {
+    chats = makeWith();
+    const t = threads.create('');
+    await chats.send(t.id, recipeText);
+    await until(() => threads.messages(t.id).length === 2);
+    expect(opened[0].instructions).toContain('기본 지시');
+    expect(opened[0].instructions).toContain('레시피로 만드는 중');
+    expect(threads.get(t.id)).toMatchObject({ recipe: true, title: '메뉴바에 시계를 보여 준다' });
+    await chats.close(t.id);
+    await chats.send(t.id, '시간대는 서울이에요');
+    await until(() => threads.messages(t.id).length === 4);
+    expect(opened[1].instructions).toContain('레시피로 만드는 중');
+  });
+
+  it('일반 글로 시작하면 레시피 모드가 아니다. 중간에 레시피를 붙여넣어도 모드가 바뀌지 않는다', async () => {
+    chats = makeWith();
+    const t = threads.create('');
+    await chats.send(t.id, '메뉴바에 시계를 넣고 싶어요');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(opened[0].instructions).toBe('기본 지시');
+    await chats.send(t.id, recipeText);
+    await until(() => threads.messages(t.id).length === 4);
+    expect(threads.get(t.id)!.recipe).toBeUndefined();
+  });
+
+  it('기억이 최신이면 --resume 대신 새 세션에 기억을 넣고, 알림 글을 남긴다', async () => {
+    chats = makeWith();
+    const t = threads.create('');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(threads.get(t.id)!.session).toBe('sess-new');
+    await chats.close(t.id);
+
+    memoryText = '## 이 앱의 기억\n목표: 시계';
+    await chats.send(t.id, '이어서');
+    await until(() => threads.messages(t.id).some((m) => m.text === 'echo:이어서'));
+    expect(opened[1].resume).toBeUndefined();
+    expect(opened[1].instructions).toContain('## 이 앱의 기억\n목표: 시계');
+    expect(threads.messages(t.id).some((m) => m.role === 'notice' && m.text.includes('기억을 불러와서'))).toBe(true);
+  });
+
+  it('기억이 없거나 낡았으면(null) 평소처럼 세션을 이어 연다', async () => {
+    chats = makeWith();
+    const t = threads.create('');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    await chats.close(t.id);
+    await chats.send(t.id, '이어서');
+    await until(() => threads.messages(t.id).some((m) => m.text === 'echo:이어서'));
+    expect(opened[1].resume).toBe('sess-new');
+    expect(threads.messages(t.id).some((m) => m.role === 'notice')).toBe(false);
   });
 });

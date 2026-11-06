@@ -55,3 +55,17 @@ export const fixReply = (text, cwd = process.cwd()) => {
   const submit = build('submit');
   return submit.startsWith('수정본을 검증했고') ? '명령이 없어서 멈추던 부분을 고쳤고, 그 경우를 시험으로 확인했어요.' : `제출 실패: ${verify.split('\n')[0]}`;
 };
+
+/** 기억 정리 담당으로 불렸으면 기억 JSON을 돌려준다(modules/memory/memory.ts의 출력 모양). 아니면 null */
+export const memoryReply = (text) =>
+  text.includes('기억 정리 담당')
+    ? JSON.stringify({
+        goal: '메뉴바에 시계를 보여 준다',
+        requirements: [{ id: 'R1', text: '시계를 보여 준다' }],
+        decisions: [{ what: '24시간제로 보여 준다', why: '사용자가 원해서' }],
+        environment: [{ fact: '내 시간대는 서울', blank: '시간대', sensitive: false }],
+        tried: [{ method: '초 단위 갱신', whyDropped: '배터리를 많이 써서' }],
+        references: [],
+        todo: [],
+      })
+    : null;
