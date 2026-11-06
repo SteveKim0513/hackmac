@@ -1,25 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
-import { VENDOR_LABEL, type Message, type ThreadMeta } from '../../shared/studio';
+import { VENDOR_LABEL, type BuildState, type Message, type ReqStatus, type ThreadMeta } from '../../shared/studio';
 
 interface Props {
   threadId: string;
   onBack: () => void;
+  onOpenApp: (appId: string) => void;
 }
 
-/** 계획서 7.1의 여섯 단계. 3단계(계정·대화)에서는 ① 요구 정리만 돈다 */
+/** 계획서 7.1의 여섯 단계(modules/build/progress.ts STEPS와 같다) */
 const STEPS = ['요구 정리', '가능성 평가', '개발', '자체 검증', '사용자 확인', '완료'];
+const REQ_LABEL: Record<ReqStatus, { mark: string; text: string }> = {
+  todo: { mark: '○', text: '대기' },
+  passed: { mark: '✓', text: '시험 통과' },
+  failed: { mark: '✕', text: '시험 실패' },
+  missing: { mark: '△', text: '시험 없음' },
+  manual: { mark: '◇', text: '직접 확인' },
+};
+const VERDICT_LABEL = { possible: '가능', conditional: '조건부 가능', impossible: '불가능' } as const;
 
 /**
  * 스레드 하나 = 앱 하나(계획서 8.4). 왼쪽은 상태, 오른쪽은 채팅. 채팅은 언제나 오른쪽에 있고 왼쪽만 바뀐다.
  * 진행 상태는 엔진 글에서 추측하지 않는다 — 지금은 ① 단계 고정이고, 4단계에서 구조화된 진행 사건이 들어온다.
  */
-export function ThreadPage({ threadId, onBack }: Props) {
+export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
   const [meta, setMeta] = useState<ThreadMeta | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState('');
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [build, setBuild] = useState<BuildState | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const startedAt = useRef<number | null>(null);
   const [, tick] = useState(0);
@@ -31,7 +41,9 @@ export function ThreadPage({ threadId, onBack }: Props) {
       setMessages(t.messages);
       setBusy(t.busy);
     });
-    return window.studio.onChat((id, e) => {
+    void window.studio.build(threadId).then(setBuild);
+    const offBuild = window.studio.onBuild((id, st) => id === threadId && setBuild(st));
+    const offChat = window.studio.onChat((id, e) => {
       if (id !== threadId) return;
       if (e.kind === 'text' && e.phase === 'answer') setStreaming((s) => s + e.delta);
       if (e.kind === 'message') {
@@ -42,6 +54,10 @@ export function ThreadPage({ threadId, onBack }: Props) {
       }
       if (e.kind === 'state') setBusy(e.busy);
     });
+    return () => {
+      offBuild();
+      offChat();
+    };
   }, [threadId]);
 
   useEffect(() => {
@@ -78,18 +94,76 @@ export function ThreadPage({ threadId, onBack }: Props) {
         <h1 className="thread-title">{meta?.title ?? ''}</h1>
         <p className="thread-engine">{meta?.vendor ? `${VENDOR_LABEL[meta.vendor]}로 만드는 중` : '첫 글을 보내면 시작해요'}</p>
         <ol className="step-list">
-          {STEPS.map((s, i) => (
-            <li key={s} className={i === 0 ? 'is-current' : ''}>
-              <span className="step-num">{i + 1}</span>
-              {s}
-            </li>
-          ))}
+          {STEPS.map((label, i) => {
+            const n = i + 1;
+            const step = build?.step ?? 1;
+            return (
+              <li key={label} className={n === step ? 'is-current' : n < step ? 'is-done' : ''}>
+                <span className="step-num">{n < step ? '✓' : n}</span>
+                {label}
+              </li>
+            );
+          })}
         </ol>
-        <p className="thread-now">
-          <span className="thread-now-label">지금</span>
-          {busy ? `답을 쓰는 중 · ${elapsed}초` : messages.length ? '답을 기다리고 있어요' : '만들고 싶은 것을 말해 주세요'}
-        </p>
-        <p className="muted">지금은 요구사항을 함께 정리하는 데까지 해요. 실제로 앱을 만드는 단계는 다음 업데이트에서 열려요.</p>
+        {build?.installed ? (
+          <div className="build-box is-done">
+            <strong>내 앱에 들어갔어요</strong>
+            <p>홈의 내 앱에서 켜면 바로 동작해요.</p>
+            <button className="toggle-button is-active" onClick={() => onOpenApp(build.installed!.appId)}>
+              앱 보러 가기
+            </button>
+          </div>
+        ) : (
+          <p className="thread-now">
+            <span className="thread-now-label">지금</span>
+            {build?.now ?? (busy ? `답을 쓰는 중 · ${elapsed}초` : messages.length ? '답을 기다리고 있어요' : '만들고 싶은 것을 말해 주세요')}
+            {busy && build?.now ? ` · ${elapsed}초` : ''}
+          </p>
+        )}
+        {build?.ask && (
+          <div className="build-box is-ask">
+            <strong>확인이 필요해요</strong>
+            <p>{build.ask}</p>
+          </div>
+        )}
+        {build && build.requirements.length > 0 && (
+          <div className="req-list">
+            <h2>요구사항</h2>
+            {build.requirements.map((r) => (
+              <div key={r.id} className={`req-row is-${r.status}`} title={r.manual ?? undefined}>
+                <span className="req-mark">{REQ_LABEL[r.status].mark}</span>
+                <span className="req-text">{r.text}</span>
+                <span className="req-status">{REQ_LABEL[r.status].text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {build?.verdict && (
+          <div className={`build-box is-verdict-${build.verdict.kind}`}>
+            <strong>가능성 평가: {VERDICT_LABEL[build.verdict.kind]}</strong>
+            <p>{build.verdict.summary}</p>
+            {build.verdict.conditions.length > 0 && (
+              <ul>
+                {build.verdict.conditions.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {build && build.log.length > 0 && (
+          <details className="build-log">
+            <summary>자세한 기록</summary>
+            <ol>
+              {build.log.slice(-60).map((l, i) => (
+                <li key={`${l.at}-${i}`}>
+                  <span className="build-log-at">{l.at ? new Date(l.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                  {l.text}
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
       </aside>
 
       <section className="chat">

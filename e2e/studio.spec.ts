@@ -46,3 +46,27 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(page.locator('.bubble-assistant').last()).toHaveText('echo:메뉴바에 시계');
   });
 }
+
+for (const vendor of ['claude', 'codex'] as const) {
+  test(`${vendor}: 제작 전 과정 — 요구사항 → 다른 역할의 평가 → 검증 → 설치 → 내 앱에 카드`, async () => {
+    // 둘 다 로그인: 만드는 쪽이 아닌 회사가 평가한다(계획서 7.2)
+    const page = await open({ claude: 'in', codex: 'in' });
+    await page.locator(`.vendor-card[data-vendor="${vendor}"] button`).click({ timeout: 10_000 });
+    await page.locator('.create-app-button').click();
+    await page.locator('.composer textarea').fill('build-demo');
+    await page.locator('.composer textarea').press('Enter');
+    await expect(page.locator('.build-box.is-done')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('.req-row.is-passed .req-text')).toHaveText('단축키를 누르면 오늘 날짜를 알림으로 보여 준다');
+    await expect(page.locator('.build-box.is-verdict-possible strong')).toHaveText('가능성 평가: 가능');
+    await expect(page.locator('.step-list li.is-done')).toHaveCount(5);
+    await page.locator('.build-log summary').click();
+    await expect(page.locator('.build-log')).toContainText('가능성 평가: possible');
+    await expect(page.locator('.bubble-assistant').last()).toContainText('설치함: my.today', { timeout: 10_000 });
+    await page.locator('.build-box.is-done button').click();
+    await expect(page.locator('.detail-page h1')).toHaveText('오늘 날짜');
+    await page.locator('.back-button').click();
+    await expect(page.locator('.service-card-name')).toContainText(['오늘 날짜']);
+    // 완성된 앱의 스레드는 "만드는 중"에서 빠진다
+    await expect(page.locator('.thread-card')).toHaveCount(0);
+  });
+}

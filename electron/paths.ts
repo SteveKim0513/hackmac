@@ -32,6 +32,33 @@ export function popupClientJsPath(): string {
   return path.join(binDir(), 'hackmac-popup-client.cjs');
 }
 
+/** 제작 에이전트가 부르는 `hackmac-build`(zsh)와 그 Node 클라이언트 */
+export function buildWrapperPath(): string {
+  return path.join(binDir(), 'hackmac-build');
+}
+export function buildClientJsPath(): string {
+  return path.join(binDir(), 'hackmac-build-client.cjs');
+}
+/** 검증 게이트가 시험을 돌릴 때 $HACKMAC_POPUP 자리에 넣는 가짜 팝업 */
+export function popupStubPath(): string {
+  return path.join(binDir(), 'hackmac-popup-stub');
+}
+
+/** 제작 에이전트 지시·능력 목록·참고 문서. 패키지에선 extraResources의 agent/, 개발 중엔 resources/agent + docs/ */
+export function agentDocs(): { builder: string; capabilities: string; appleGuide: string; manifestDoc: string | null } {
+  if (app.isPackaged) {
+    const d = path.join(process.resourcesPath, 'agent');
+    return { builder: path.join(d, 'builder.md'), capabilities: path.join(d, 'capabilities.md'), appleGuide: path.join(d, 'apple-app-data-access-guide.md'), manifestDoc: null };
+  }
+  const root = app.getAppPath();
+  return {
+    builder: path.join(root, 'resources', 'agent', 'builder.md'),
+    capabilities: path.join(root, 'resources', 'agent', 'capabilities.md'),
+    appleGuide: path.join(root, 'docs', 'apple-app-data-access-guide.md'),
+    manifestDoc: path.join(root, 'docs', 'hackmac-v2-manifest.md'),
+  };
+}
+
 /** Unix domain socket electron/popupServer.ts listens on. Lives in
  * userData (writable, per-install) rather than next to the read-only
  * bundled resources. */

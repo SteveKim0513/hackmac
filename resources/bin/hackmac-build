@@ -1,0 +1,9 @@
+#!/bin/zsh
+# 제작 에이전트가 HackMac에 진행을 알리고 평가·검증·설치를 부탁하는 명령. 사용법은 `"$HACKMAC_BUILD" help`.
+# 실제 일은 hackmac-build-client.cjs가 한다(HackMac에 든 Electron을 Node로 돌린다 — 사용자 맥에 node가 없어도 된다).
+# HACKMAC_ELECTRON_BIN / HACKMAC_BUILD_CLIENT_JS / HACKMAC_BUILD_DIR는 작업실(electron/studioHost.ts)이 엔진에 넣어 준다.
+if [[ -z "$HACKMAC_ELECTRON_BIN" || -z "$HACKMAC_BUILD_CLIENT_JS" ]]; then
+  echo "hackmac-build: HackMac 작업실 안에서 실행된 것이 아니면 쓸 수 없어요" >&2
+  exit 2
+fi
+exec env ELECTRON_RUN_AS_NODE=1 "$HACKMAC_ELECTRON_BIN" "$HACKMAC_BUILD_CLIENT_JS" "$@"

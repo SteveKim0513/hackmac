@@ -9,7 +9,8 @@
 ```
 <app-id>/
   manifest.json        선언 (이 문서)
-  scripts/             트리거가 가리키는 스크립트. zsh·osascript·node
+  scripts/             트리거가 가리키는 스크립트. zsh·osascript(node는 사용자 맥에 없다)
+  checks/              검증 게이트가 돌리는 시험. checks/R<번호>-<이름>.sh가 요구사항 R<번호>의 시험 (modules/build/gate.ts)
   assets/              아이콘, 고정 데이터 (선택)
   README.md            사람이 읽는 설명 (선택, 레시피가 아님)
 ```
@@ -19,6 +20,8 @@
 - 버전 폴더(`v1/`, `v2/`)와 "현재 버전" 표시는 보관소가 패키지 바깥에서 관리한다. 패키지 자신은 자기 버전 번호만 안다.
 
 ## 2. 예시
+
+아래 예시의 `tray`·`notify`·`ai`는 **아직 없는 능력**이다(설계 예시). 지금 있는 능력은 [resources/agent/capabilities.md](../resources/agent/capabilities.md)가 원본이다.
 
 ```json
 {

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
-import type { AccountsView, ChatEvent, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
+import type { AccountsView, BuildState, ChatEvent, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -42,6 +42,18 @@ const studioApi = {
   thread: (id: string): Promise<ThreadView | null> => ipcRenderer.invoke('threads:get', id),
   send: (id: string, text: string): Promise<SendResult> => ipcRenderer.invoke('chat:send', id, text),
   interrupt: (id: string): Promise<void> => ipcRenderer.invoke('chat:interrupt', id),
+  build: (id: string): Promise<BuildState | null> => ipcRenderer.invoke('build:get', id),
+  onBuild: (cb: (threadId: string, s: BuildState) => void): (() => void) => {
+    const h = (_e: unknown, p: { threadId: string; state: BuildState }) => cb(p.threadId, p.state);
+    ipcRenderer.on('build:state', h);
+    return () => ipcRenderer.removeListener('build:state', h);
+  },
+  /** 제작이 앱을 보관소에 넣었다 → 홈의 "내 앱"을 다시 읽는다 */
+  onServicesChanged: (cb: () => void): (() => void) => {
+    const h = () => cb();
+    ipcRenderer.on('services:changed', h);
+    return () => ipcRenderer.removeListener('services:changed', h);
+  },
   onChat: (cb: (threadId: string, e: ChatEvent) => void): (() => void) => {
     const h = (_e: unknown, p: { threadId: string; event: ChatEvent }) => cb(p.threadId, p.event);
     ipcRenderer.on('chat:event', h);

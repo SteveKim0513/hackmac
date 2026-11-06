@@ -58,6 +58,14 @@
       {
         "from": "resources/bin",
         "to": "bin"
+      },
+      {
+        "from": "resources/agent",
+        "to": "agent"
+      },
+      {
+        "from": "docs/apple-app-data-access-guide.md",
+        "to": "agent/apple-app-data-access-guide.md"
       }
     ],
     "mac": {

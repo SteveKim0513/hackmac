@@ -4,6 +4,7 @@
 //   "slow": turn/interrupt가 올 때까지 기다렸다가 interrupted로 끝낸다
 //   "die": 코드 3으로 끝난다
 import { createInterface } from 'node:readline';
+import { demoBuild, evaluatorReply } from './demo-build.mjs';
 
 // `codex login status`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
 if (process.argv[2] === 'login' && process.argv[3] === 'status') {
@@ -25,7 +26,7 @@ const runTurn = async (turnId, text) => {
   note('turn/started', { threadId: thread, turn: { id: turnId, items: [], status: 'inProgress' } });
   if (text === 'die') { process.stderr.write('죽음\n'); process.exit(3); }
   if (text === 'slow') { slow = turnId; return; }
-  let answer = `echo:${text}`;
+  let answer = evaluatorReply(text) ?? (text === 'build-demo' ? demoBuild(process.cwd()) : `echo:${text}`);
   if (text === 'approve') {
     const decision = await new Promise((resolve) => { waitingServer.set('srv-1', resolve); out({ id: 'srv-1', method: 'item/commandExecution/requestApproval', params: { threadId: thread, turnId, itemId: 'cmd1', command: 'rm -rf /' } }); });
     answer = `decision:${decision.decision}`;

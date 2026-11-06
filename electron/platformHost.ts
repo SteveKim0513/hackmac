@@ -18,7 +18,7 @@ import { popupClientJsPath, popupSocketPath, popupWrapperPath, servicesDir } fro
 import { hideRunningStatus, showRunningStatus } from './popupWindow';
 
 /** 이 HackMac이 가진 능력과 버전. 앱의 `capabilities: { popup: ">=1" }`가 여기와 맞춰진다 */
-const CAPABILITIES: Record<string, number> = { popup: 1 };
+export const CAPABILITIES: Record<string, number> = { popup: 1 };
 
 const SETTINGS_FILE = 'settings.json';
 

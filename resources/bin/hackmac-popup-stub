@@ -1,0 +1,48 @@
+#!/bin/zsh
+# 검증 게이트(modules/build/gate.ts)가 앱의 시험 스크립트(checks/*.sh)를 돌릴 때 $HACKMAC_POPUP 자리에 넣는 가짜 팝업.
+# 창을 띄우지 않고 정해진 답을 바로 돌려준다. 진짜 hackmac-popup과 같은 인자·출력·종료 코드 규칙을 따른다.
+#   select  → $HACKMAC_STUB_SELECT, 없으면 첫 항목(그룹 접두 "그룹"$'\x1f' 은 뗀다)
+#   prompt  → $HACKMAC_STUB_PROMPT, 없으면 --default, 그것도 없으면 "test"
+#   confirm → 종료 0. $HACKMAC_STUB_CONFIRM=cancel이면 종료 1
+#   date    → --default, 없으면 오늘
+# 어떤 요청이 왔는지는 표준 오류에 남긴다(시험 로그에서 보이게).
+# $HACKMAC_STUB_CANCEL=1이면 무엇이든 취소(종료 1)한다 — 취소 경로 시험용.
+
+kind="$1"; shift
+default=""
+items=()
+while (( $# > 0 )); do
+  case "$1" in
+    --default) default="$2"; shift 2 ;;
+    --title|--prompt|--ok|--cancel) shift 2 ;;
+    --) shift; items=("$@"); break ;;
+    *) shift ;;
+  esac
+done
+echo "hackmac-popup-stub: $kind default='$default' items=${#items}" >&2
+[[ "$HACKMAC_STUB_CANCEL" == "1" ]] && exit 1
+
+case "$kind" in
+  select)
+    if [[ -n "$HACKMAC_STUB_SELECT" ]]; then print -r -- "$HACKMAC_STUB_SELECT"; exit 0; fi
+    (( ${#items} == 0 )) && exit 1
+    first="${items[1]}"
+    print -r -- "${first##*$'\x1f'}"
+    ;;
+  prompt)
+    if [[ -n "$HACKMAC_STUB_PROMPT" ]]; then print -r -- "$HACKMAC_STUB_PROMPT"
+    elif [[ -n "$default" ]]; then print -r -- "$default"
+    else print -r -- "test"; fi
+    ;;
+  confirm)
+    [[ "$HACKMAC_STUB_CONFIRM" == "cancel" ]] && exit 1
+    ;;
+  date)
+    if [[ -n "$default" ]]; then print -r -- "$default"; else date +%Y-%m-%d; fi
+    ;;
+  *)
+    echo "hackmac-popup-stub: 모르는 종류 '$kind'" >&2
+    exit 2
+    ;;
+esac
+exit 0

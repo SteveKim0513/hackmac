@@ -25,12 +25,15 @@ export default function App() {
     void window.studio.accounts(true).then(setAccounts);
     void window.studio.threads().then(setThreads);
     const offAccounts = window.studio.onAccountsChanged(setAccounts);
+    // 제작이 앱을 보관소에 넣으면 "내 앱"을 다시 읽는다
+    const offServices = window.studio.onServicesChanged(() => void window.playbook.listServices().then(setServices));
     // 스레드 제목·바쁨이 바뀌면 홈 목록도 다시 읽는다(목록은 작아서 매번 다 읽어도 된다)
     const offChat = window.studio.onChat((_id, e) => {
       if (e.kind === 'message' || e.kind === 'state') void window.studio.threads().then(setThreads);
     });
     return () => {
       offAccounts();
+      offServices();
       offChat();
     };
   }, []);
@@ -102,6 +105,12 @@ export default function App() {
           onBack={() => {
             void window.studio.threads().then(setThreads);
             setView({ name: 'store' });
+          }}
+          onOpenApp={(appId) => {
+            void window.playbook.listServices().then((list) => {
+              setServices(list);
+              setView(list.some((x) => x.id === appId) ? { name: 'detail', serviceId: appId } : { name: 'store' });
+            });
           }}
         />
       </div>

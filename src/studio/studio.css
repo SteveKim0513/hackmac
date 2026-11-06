@@ -349,3 +349,114 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* ── 제작 진행(왼쪽) ───────────────────── */
+.step-list li.is-done {
+  color: var(--text-dim);
+}
+
+.step-list li.is-done .step-num {
+  background: color-mix(in srgb, var(--accent-default) 18%, var(--surface-hover));
+  color: var(--accent-default);
+}
+
+.build-box {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.build-box p {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+}
+
+.build-box ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+
+.build-box .toggle-button {
+  margin-top: 10px;
+}
+
+/* 확인 필요가 가장 중요한 상태(계획서 8.2) — 악센트로 테두리를 칠한다 */
+.build-box.is-ask,
+.build-box.is-done {
+  border-color: color-mix(in srgb, var(--accent-default) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent-default) 6%, var(--surface));
+}
+
+.build-box.is-verdict-impossible strong {
+  color: var(--danger);
+}
+
+.req-list {
+  margin: 0 0 14px;
+}
+
+.req-list h2 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin: 0 0 6px;
+}
+
+.req-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 0;
+  line-height: 1.4;
+}
+
+.req-mark {
+  color: var(--text-faint);
+}
+
+.req-status {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.req-row.is-passed .req-mark,
+.req-row.is-passed .req-status {
+  color: var(--accent-default);
+}
+
+.req-row.is-failed .req-mark,
+.req-row.is-failed .req-status {
+  color: var(--danger);
+}
+
+.build-log {
+  margin-top: 8px;
+  color: var(--text-dim);
+}
+
+.build-log summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.build-log ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: text;
+}
+
+.build-log-at {
+  color: var(--text-faint);
+  margin-right: 6px;
+}

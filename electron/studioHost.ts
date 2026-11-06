@@ -8,29 +8,36 @@
  * HACKMAC_CLI_DIRS(콜론 구분)가 있으면 그 폴더에서만 CLI를 찾는다 — E2E가 가짜 CLI를 쓰게 하려는 것.
  */
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { chooseEngine } from '../modules/account/choose';
 import { cliStatus, envFor, resolveBin, run, searchDirs, VENDORS, type CliStatus, type Vendor } from '../modules/account/cli';
 import { createLogins, fileLogger, type LoginView } from '../modules/account/login';
 import type { Platform } from '../modules/platform/platform';
+import { agentOptions, builderInstructions, type AgentPaths } from '../modules/build/agent';
+import { Builder } from '../modules/build/builder';
+import type { BuildState } from '../modules/build/progress';
+import { askOnce } from '../modules/conversation/once';
 import { Chats, type ChatEvent } from '../modules/studio/chat';
+import { readPackage } from '../modules/store/store';
 import { ThreadStore, type ThreadMeta } from '../modules/thread/thread';
+import { CAPABILITIES } from './platformHost';
 import type { AccountsView, ThreadView, VendorView } from '../shared/studio';
 import { appLog, describeError } from './log';
+import { agentDocs, buildClientJsPath, buildWrapperPath, popupStubPath } from './paths';
 
-/**
- * 3단계(계정·대화)의 작업실 지시. 아직 앱을 만들지 않는다: 도구를 허용하지 않고(Claude dontAsk + allowedTools 없음),
- * 요구사항을 묻고 정리하는 데까지만 한다. 4단계(제작)에서 맥 전문 에이전트 지시로 바뀐다.
- */
-export const STUDIO_INSTRUCTIONS = [
-  '너는 HackMac의 앱 설계 도우미다. HackMac은 macOS에서 단축키·메뉴바·스케줄로 도는 작은 자동화 앱을 만들어 켜고 끄는 제품이다.',
-  '사용자가 맥에서 하고 싶은 일을 들으면, 꼭 필요한 것만 한 번에 하나씩 물어서 요구사항을 번호 붙은 목록으로 정리한다.',
-  '지금 단계에서는 코드를 쓰거나 명령을 실행하거나 파일을 만들지 않는다. 대화로만 정리한다.',
-  '한국어로, 짧고 쉬운 말로 답한다. 전문 용어는 꼭 필요할 때만 쓰고 바로 풀어 말한다.',
-  // 채팅 화면은 글을 그대로 보여 준다(마크다운을 그리지 않는다). 실제로 Claude가 **굵게**를 써서 별표가 그대로 보였다
-  '채팅 화면은 마크다운을 그리지 않는다. **, #, ` 같은 기호를 쓰지 말고, 목록은 줄마다 "- "나 "1. "로 시작한다.',
-].join('\n');
+const VENDOR_NAME: Record<Vendor, string> = { claude: 'Claude', codex: 'Codex' };
+
+/** 사용자 macOS 버전(평가에 쓴다). 못 읽으면 커널 버전 */
+const macosVersion = (): string => {
+  try {
+    return `macOS ${execFileSync('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim()}`;
+  } catch {
+    return `Darwin ${os.release()}`;
+  }
+};
 
 const cliDirs = (): string[] => (process.env.HACKMAC_CLI_DIRS ? process.env.HACKMAC_CLI_DIRS.split(path.delimiter).filter(Boolean) : searchDirs());
 const binFor = (v: Vendor): string | null => resolveBin(v, cliDirs());
@@ -77,6 +84,75 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
     return bin ? { bin, env: envFor(bin) } : null;
   };
 
+  // ── 제작(4단계) ──────────────────────────────
+  for (const f of [buildWrapperPath(), buildClientJsPath(), popupStubPath()]) {
+    try { chmodSync(f, 0o755); } catch (err) { appLog.warn('studio', `실행 권한 설정 실패: ${f} — ${describeError(err)}`); }
+  }
+  const docs = agentDocs();
+  const agentPaths: AgentPaths = {
+    buildWrapper: buildWrapperPath(),
+    buildClientJs: buildClientJsPath(),
+    electronBin: process.execPath,
+    docs: [
+      { label: 'Apple 앱 데이터 접근 진단(첨부·링크·폴더 등 기본 필드 밖 데이터를 읽기 전에)', path: docs.appleGuide },
+      ...(docs.manifestDoc ? [{ label: '앱 선언 설계 문서(예시의 tray·notify·ai는 아직 없는 능력)', path: docs.manifestDoc }] : []),
+    ],
+  };
+  const capabilitiesText = readFileSync(docs.capabilities, 'utf8');
+  const instructions = builderInstructions(readFileSync(docs.builder, 'utf8'), capabilitiesText, agentPaths.docs);
+  const appleGuide = (() => { try { return readFileSync(docs.appleGuide, 'utf8').slice(0, 6000); } catch { return undefined; } })();
+  const macos = macosVersion();
+
+  const builders = new Map<string, Builder>();
+  const builderFor = (threadId: string): Builder => {
+    let b = builders.get(threadId);
+    if (b) return b;
+    const work = realpathSync(threads.workDir(threadId));
+    b = new Builder({
+      workDir: work,
+      progressFile: path.join(threads.dirOf(threadId), 'progress.jsonl'),
+      gate: { capabilities: CAPABILITIES, realHome: os.homedir(), popupStub: popupStubPath() },
+      // 계획서 7.2: 만드는 쪽이 아닌 역할이 평가한다. 두 회사가 다 로그인돼 있으면 다른 회사에게
+      evaluator: () => {
+        const builderVendor = threads.get(threadId)?.vendor ?? platform.settings.get().engine;
+        const order = VENDORS.filter((v) => v !== builderVendor).concat(builderVendor ? [builderVendor] : []);
+        const v = order.find((x) => engineFor(x));
+        if (!v) return null;
+        const eng = engineFor(v)!;
+        return {
+          by: VENDOR_NAME[v],
+          ask: async (prompt: string) => {
+            const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'hackmac-eval-')));
+            try {
+              return await askOnce(v, { bin: eng.bin, cwd: dir, env: eng.env, allowedTools: [] }, prompt);
+            } finally {
+              rmSync(dir, { recursive: true, force: true });
+            }
+          },
+        };
+      },
+      evaluateContext: { capabilities: capabilitiesText, appleGuide, macosVersion: macos },
+      installedVersion: (appId) => {
+        const dir = platform.store.currentDir(appId);
+        const r = dir ? readPackage(dir) : null;
+        return r?.ok ? r.manifest.version : null;
+      },
+      install: (pkgDir) => {
+        const r = platform.install(pkgDir);
+        if (r.ok) {
+          threads.update(threadId, { appId: r.id });
+          appLog.info('studio', `스레드 ${threadId} → 앱 설치 ${r.id} v${r.version}`);
+          broadcast('services:changed', null);
+        }
+        return r.ok ? { ok: true, id: r.id, version: r.version } : { ok: false, errors: r.errors };
+      },
+      onState: (state: BuildState) => broadcast('build:state', { threadId, state }),
+    });
+    b.start();
+    builders.set(threadId, b);
+    return b;
+  };
+
   const chats = new Chats({
     threads,
     defaultVendor: () => {
@@ -84,8 +160,11 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
       return saved && vendors?.[saved]?.loggedIn ? saved : null;
     },
     engineFor,
-    instructions: STUDIO_INSTRUCTIONS,
-    allowedTools: [],
+    instructions,
+    optionsFor: (vendor, threadId, cwd) => {
+      builderFor(threadId);
+      return agentOptions(vendor, cwd, agentPaths);
+    },
     onEvent: (threadId: string, e: ChatEvent) => {
       if (e.kind === 'turnEnd' && e.error) appLog.warn('studio', `스레드 ${threadId} 턴 실패: ${e.error}`);
       if (e.kind === 'exit' && !e.expected) appLog.warn('studio', `스레드 ${threadId} 엔진이 끝남: 코드 ${e.code ?? e.signal}`);
@@ -121,8 +200,14 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
   });
   ipcMain.handle('chat:send', (_e, id: string, text: string) => chats.send(id, String(text ?? '')));
   ipcMain.handle('chat:interrupt', (_e, id: string) => chats.interrupt(id));
+  ipcMain.handle('build:get', (_e, id: string): BuildState | null => (threads.get(id) ? builderFor(id).state() : null));
 
   void view(true).catch((err) => appLog.error('studio', `엔진 감지 실패: ${describeError(err)}`));
 
-  return { stop: () => chats.stopAll() };
+  return {
+    stop: async () => {
+      for (const b of builders.values()) b.stop();
+      await chats.stopAll();
+    },
+  };
 }

@@ -45,6 +45,11 @@ export class ThreadStore {
     return join(this.root, id);
   }
 
+  /** 스레드 폴더(작업 폴더 밖 — 진행 기록처럼 에이전트가 건드리면 안 되는 것을 둔다) */
+  dirOf(id: string): string {
+    return this.dir(id);
+  }
+
   workDir(id: string): string {
     const d = join(this.dir(id), 'work');
     mkdirSync(d, { recursive: true });

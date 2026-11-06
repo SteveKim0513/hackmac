@@ -5,6 +5,7 @@
  *   - 엔진이 죽으면 지도에서 빼고, 다음 글이 오면 세션 번호로 이어 연다.
  *   - 화면에 보내는 사건은 엔진 사건 + 저장된 글(message) + 바쁨 상태(state).
  */
+import { realpathSync } from 'node:fs';
 import type { Vendor } from '../account/cli.ts';
 import { createConversation as defaultCreate, type Conversation, type ConversationEvent, type ConversationOptions } from '../conversation/index.ts';
 import type { Message, ThreadStore } from '../thread/thread.ts';
@@ -21,6 +22,8 @@ export interface ChatDeps {
   engineFor: (vendor: Vendor) => EngineHandle | null;
   instructions: string;
   allowedTools?: string[];
+  /** 회사·스레드별로 더 줄 것(제작 명령 env, Claude 샌드박스 설정 등). 마지막에 덮어쓴다. env는 합친다 */
+  optionsFor?: (vendor: Vendor, threadId: string, cwd: string) => Partial<ConversationOptions>;
   onEvent: (threadId: string, e: ChatEvent) => void;
   create?: (vendor: Vendor, o: ConversationOptions) => Conversation;
 }
@@ -76,13 +79,17 @@ export class Chats {
 
   private async open(threadId: string, vendor: Vendor, engine: EngineHandle, resume: string | null): Promise<Conversation> {
     const create = this.d.create ?? defaultCreate;
+    // 실제 경로로 넘긴다: Claude의 Write(./**) 규칙은 링크가 낀 경로(/var → /private/var)에서 작업 폴더 안 쓰기까지 막았다(실측)
+    const cwd = realpathSync(this.d.threads.workDir(threadId));
+    const extra = this.d.optionsFor?.(vendor, threadId, cwd) ?? {};
     const conv = create(vendor, {
       bin: engine.bin,
-      cwd: this.d.threads.workDir(threadId),
-      env: engine.env,
+      cwd,
       ...(resume ? { resume } : {}),
       instructions: this.d.instructions,
       ...(this.d.allowedTools ? { allowedTools: this.d.allowedTools } : {}),
+      ...extra,
+      env: { ...engine.env, ...(extra.env ?? {}) },
     });
     conv.onEvent((e) => this.onEngine(threadId, conv, e));
     this.live.set(threadId, conv);
