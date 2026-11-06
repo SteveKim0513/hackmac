@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { VENDOR_LABEL, type AccountsView, type LoginView, type Vendor } from '../../shared/studio';
+import { VENDOR_LABEL, type AccountsView, type InstallView, type LoginView, type Vendor } from '../../shared/studio';
 
 interface Props {
   accounts: AccountsView;
@@ -39,6 +39,14 @@ export function Onboarding({ accounts, onAccounts }: Props) {
 function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view: AccountsView['vendors'][Vendor]; asking: boolean; onAccounts: (a: AccountsView) => void }) {
   const [login, setLogin] = useState<LoginView | null>(null);
   const [code, setCode] = useState('');
+  const [install, setInstall] = useState<InstallView | null>(null);
+
+  // 설치 중에는 1초마다 진행 글을 받아 온다. 끝나면 accounts:changed가 카드를 "로그인 필요"로 바꾼다
+  useEffect(() => {
+    if (install?.state !== 'running') return;
+    const t = setInterval(() => void window.studio.installState(vendor).then((s) => s && setInstall(s)), 1000);
+    return () => clearInterval(t);
+  }, [install?.state, vendor]);
 
   // 로그인 중에는 1초마다 CLI 출력(주소·코드 대기)을 받아 온다. 끝나면 accounts:changed가 화면을 바꾼다
   useEffect(() => {
@@ -64,7 +72,27 @@ function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view
           로그인
         </button>
       )}
-      {!view.installed && <p className="vendor-card-note">자동 설치는 곧 추가돼요. 지금은 공식 설치 안내를 따라 설치한 뒤 HackMac을 다시 열어 주세요.</p>}
+      {!view.installed && !install && (
+        <button className="toggle-button" onClick={() => void window.studio.installStart(vendor).then(setInstall)}>
+          설치하기
+        </button>
+      )}
+      {!view.installed && install?.state === 'running' && (
+        <div className="login-panel" data-install="running">
+          <p>설치하는 중이에요. 보통 1분 안에 끝나요.</p>
+          {install.output && <pre>{install.output.trim().split('\n').filter(Boolean).slice(-2).join('\n')}</pre>}
+        </div>
+      )}
+      {install?.state === 'failed' && (
+        <div className="login-panel is-error" data-install="failed">
+          <p>설치하지 못했어요.</p>
+          {install.error && <pre>{install.error}</pre>}
+          <button className="toggle-button" onClick={() => void window.studio.installStart(vendor).then(setInstall)}>
+            다시 시도
+          </button>
+        </div>
+      )}
+      {!view.installed && !install && <p className="vendor-card-note">{VENDOR_LABEL[vendor]} 공식 설치 프로그램으로 이 Mac에 깔아요. 관리자 암호는 필요 없어요.</p>}
       {!ready && <p className="vendor-card-note">{PLAN_NEEDED[vendor]}</p>}
       {login && login.state === 'pending' && (
         <div className="login-panel">

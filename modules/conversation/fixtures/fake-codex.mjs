@@ -6,6 +6,8 @@
 import { createInterface } from 'node:readline';
 import { demoBuild, evaluatorReply } from './demo-build.mjs';
 
+if (process.argv[2] === '--version') { console.log('codex-cli 9.9.9'); process.exit(0); }
+
 // `codex login status`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
 if (process.argv[2] === 'login' && process.argv[3] === 'status') {
   if (process.env.HACKMAC_FAKE_LOGGED_OUT === '1') { process.stderr.write('Not logged in\n'); process.exit(1); }

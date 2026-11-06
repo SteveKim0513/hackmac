@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline';
 import { demoBuild, evaluatorReply } from './demo-build.mjs';
 
 const argv = process.argv.slice(2);
+if (argv[0] === '--version') { console.log('9.9.9 (Claude Code)'); process.exit(0); }
 // `claude auth status --json`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
 if (argv[0] === 'auth' && argv[1] === 'status') {
   const out = process.env.HACKMAC_FAKE_LOGGED_OUT === '1'

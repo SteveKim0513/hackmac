@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
-import type { AccountsView, BuildState, ChatEvent, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
+import type { AccountsView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -32,6 +32,8 @@ const studioApi = {
     ipcRenderer.on('accounts:changed', h);
     return () => ipcRenderer.removeListener('accounts:changed', h);
   },
+  installStart: (v: Vendor): Promise<InstallView> => ipcRenderer.invoke('install:start', v),
+  installState: (v: Vendor): Promise<InstallView | null> => ipcRenderer.invoke('install:state', v),
   loginStart: (v: Vendor): Promise<LoginView> => ipcRenderer.invoke('login:start', v),
   loginState: (v: Vendor): Promise<LoginView | null> => ipcRenderer.invoke('login:state', v),
   loginSubmit: (v: Vendor, code: string): Promise<LoginView | null> => ipcRenderer.invoke('login:submit', v, code),

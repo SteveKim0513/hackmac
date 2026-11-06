@@ -29,6 +29,16 @@ test('로그인한 엔진이 없으면 로그인 화면, 설치 안 된 쪽은 �
   await expect(page.locator('.vendor-card[data-vendor="codex"] .vendor-card-status')).toHaveText('이 Mac에 설치돼 있지 않아요');
 });
 
+test('CLI가 없으면 "설치하기" → 설치 중 → 깔리면 로그인 단계로 넘어간다', async () => {
+  const page = await open({ claude: 'none', codex: 'installable' });
+  const card = page.locator('.vendor-card[data-vendor="codex"]');
+  await expect(card.locator('.vendor-card-status')).toHaveText('이 Mac에 설치돼 있지 않아요', { timeout: 10_000 });
+  await card.locator('button', { hasText: '설치하기' }).click();
+  await expect(card.locator('[data-install="running"]')).toBeVisible();
+  await expect(card.locator('.vendor-card-status')).toHaveText('로그인이 필요해요', { timeout: 15_000 });
+  await expect(card.locator('button', { hasText: '로그인' })).toBeVisible();
+});
+
 for (const vendor of ['claude', 'codex'] as const) {
   test(`${vendor}: 앱 만들기 → 글을 보내면 답이 오고, 제목이 붙고, 홈에 "만드는 중"으로 남는다`, async () => {
     const page = await open(vendor === 'claude' ? { claude: 'in' } : { claude: 'none', codex: 'in' });

@@ -15,6 +15,7 @@ import path from 'node:path';
 import { chooseEngine } from '../modules/account/choose';
 import { cliStatus, envFor, resolveBin, run, searchDirs, VENDORS, type CliStatus, type Vendor } from '../modules/account/cli';
 import { createLogins, fileLogger, type LoginView } from '../modules/account/login';
+import { createInstalls, type InstallView } from '../modules/prepare/install';
 import type { Platform } from '../modules/platform/platform';
 import { agentOptions, builderInstructions, type AgentPaths } from '../modules/build/agent';
 import { Builder } from '../modules/build/builder';
@@ -50,6 +51,15 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
   const threads = new ThreadStore(path.join(app.getPath('userData'), 'threads'));
   const logins = createLogins({ spawn, bin: binFor, log: fileLogger(path.join(app.getPath('logs'), 'accounts')) });
   let vendors: Record<Vendor, VendorView> | null = null;
+  // 준비: 없는 CLI를 공식 설치 스크립트로 깐다. HACKMAC_INSTALL_SCRIPT_<VENDOR>는 E2E 전용(진짜 설치기 대신 가짜 CLI를 놓는다)
+  const accountsLog = fileLogger(path.join(app.getPath('logs'), 'accounts'));
+  const installs = createInstalls({
+    spawn,
+    home: os.homedir(),
+    binDirs: cliDirs,
+    scripts: Object.fromEntries(VENDORS.flatMap((v) => (process.env[`HACKMAC_INSTALL_SCRIPT_${v.toUpperCase()}`] ? [[v, process.env[`HACKMAC_INSTALL_SCRIPT_${v.toUpperCase()}`]!]] : []))),
+    log: (v, text) => accountsLog(`install-${v}`, text),
+  });
 
   const detect = async (): Promise<Record<Vendor, VendorView>> => {
     const entries = await Promise.all(
@@ -186,6 +196,14 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
     });
   });
   ipcMain.handle('login:state', (_e, v: Vendor) => logins.state(v));
+  ipcMain.handle('install:start', (_e, v: Vendor): InstallView => {
+    if (!VENDORS.includes(v)) throw new Error(`모르는 엔진: ${v}`);
+    return installs.start(v, (ok) => {
+      appLog.info('studio', `${v} 설치 ${ok ? '성공' : '실패'}`);
+      void view(true).then((a) => broadcast('accounts:changed', a));
+    });
+  });
+  ipcMain.handle('install:state', (_e, v: Vendor) => installs.state(v));
   ipcMain.handle('login:submit', (_e, v: Vendor, code: string) => logins.submit(v, code));
   ipcMain.handle('login:cancel', (_e, v: Vendor) => logins.cancel(v));
   ipcMain.handle('login:openUrl', (_e, url: string) => {

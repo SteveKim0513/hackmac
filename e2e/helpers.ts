@@ -24,8 +24,8 @@ export interface AppHandle {
  *
  * `npm run test:e2e`가 먼저 `npm run build`를 실행해 이 파일을 만들어둔다.
  */
-/** 가짜 CLI 상태. in: 설치+로그인, out: 설치만, none: 설치 안 됨 */
-export type FakeCli = 'in' | 'out' | 'none';
+/** 가짜 CLI 상태. in: 설치+로그인, out: 설치만, none: 설치 안 됨, installable: 설치 안 됨이지만 "설치하기"를 누르면 로그아웃 상태로 깔린다 */
+export type FakeCli = 'in' | 'out' | 'none' | 'installable';
 /** real: 가짜 CLI 대신 이 Mac에 깔린 진짜 claude/codex를 쓴다(구독 사용량을 쓴다) */
 export interface LaunchOptions { claude?: FakeCli; codex?: FakeCli; real?: boolean }
 
@@ -34,22 +34,32 @@ export interface LaunchOptions { claude?: FakeCli; codex?: FakeCli; real?: boole
  * 이 Mac에 무엇이 깔려 있든 같은 결과가 나오게. electron/studioHost.ts는 HACKMAC_CLI_DIRS 안에서만 CLI를 찾는다.
  * 로그아웃 상태는 CLI마다 따로 줘야 해서 감싸는 스크립트 안에 환경변수를 박는다.
  */
-function fakeCliDir(o: LaunchOptions): string {
+function fakeCliDir(o: LaunchOptions): { dir: string; env: Record<string, string> } {
   const dir = mkdtempSync(join(tmpdir(), 'hackmac-fakecli-'));
+  const env: Record<string, string> = {};
   for (const v of ['claude', 'codex'] as const) {
     const state = o[v] ?? (v === 'claude' ? 'in' : 'none');
     if (state === 'none') continue;
     const fixture = join(REPO_ROOT, 'modules/conversation/fixtures', `fake-${v}.mjs`);
-    const out = state === 'out' ? 'HACKMAC_FAKE_LOGGED_OUT=1 ' : '';
-    writeFileSync(join(dir, v), `#!/bin/zsh\n${out}exec "${process.execPath}" "${fixture}" "$@"\n`);
+    const out = state === 'in' ? '' : 'HACKMAC_FAKE_LOGGED_OUT=1 ';
+    const body = `#!/bin/zsh\n${out}exec "${process.execPath}" "${fixture}" "$@"\n`;
+    if (state === 'installable') {
+      // 진짜 설치기 대신: 잠깐 뒤 가짜 CLI를 제자리에 놓는다(electron/studioHost.ts의 HACKMAC_INSTALL_SCRIPT_<VENDOR>)
+      const staged = join(dir, `.staged-${v}`);
+      writeFileSync(staged, body);
+      chmodSync(staged, 0o755);
+      env[`HACKMAC_INSTALL_SCRIPT_${v.toUpperCase()}`] = `echo "Downloading ${v}..."; sleep 0.5; cp "${staged}" "${join(dir, v)}"; echo "Installation complete"`;
+      continue;
+    }
+    writeFileSync(join(dir, v), body);
     chmodSync(join(dir, v), 0o755);
   }
-  return dir;
+  return { dir, env };
 }
 
 export async function launchApp(options: LaunchOptions = {}): Promise<AppHandle> {
   const userData = mkdtempSync(join(tmpdir(), 'hackmac-userData-'));
-  const cliDir = fakeCliDir(options);
+  const { dir: cliDir, env: cliEnv } = fakeCliDir(options);
 
   const env: Record<string, string> = { ...(process.env as Record<string, string>) };
   // VS Code 등 개발 셸이 기본으로 걸어두는 값 — 켜져 있으면 Electron이 창을
@@ -57,7 +67,7 @@ export async function launchApp(options: LaunchOptions = {}): Promise<AppHandle>
   delete env.ELECTRON_RUN_AS_NODE;
   env.HACKMAC_USER_DATA = userData;
   env.HACKMAC_E2E_QUIET = '1';
-  if (!options.real) env.HACKMAC_CLI_DIRS = cliDir;
+  if (!options.real) Object.assign(env, { HACKMAC_CLI_DIRS: cliDir, ...cliEnv });
 
   // REPO_ROOT(파일이 아니라 디렉터리)를 넘겨야 Electron이 REPO_ROOT/package.json의
   // "main"(dist-electron/main.js)을 읽어 app.getAppPath()를 REPO_ROOT로 잡는다 —
