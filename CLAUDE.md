@@ -83,6 +83,8 @@ modules/hotkey/slots.ts  ─ 단축키 자리 풀과 배정
 modules/runner/          ─ 1회 실행·상주 감독·cron·실행 로그
 modules/ledger/          ─ 추가 전용 JSONL 사건 원장
 modules/settings/        ─ v2 settings.json(안전 쓰기, 깨진 파일 사본)
+modules/account/         ─ claude/codex CLI 찾기·로그인 상태·로그인 흐름·엔진 고르기 (토큰은 안 만짐, API 키 env는 늘 뗌)
+modules/conversation/    ─ 대화 엔진 공통 인터페이스 + Claude(stream-json)·Codex(app-server) 어댑터. 실제 CLI 시험은 HACKMAC_REAL_ENGINES=1
 shared/manifest.ts       ─ v2 앱 선언 타입과 검증
 build/launchd/           ─ 상주 agent plist (electron-builder extraFiles로 Contents/Library/LaunchAgents에 들어감)
 electron/preload.ts     ─ contextBridge로 window.playbook / window.hackmacPopup API 노출

@@ -140,8 +140,13 @@ launchd (macOS가 살려 둠)
 
 - 로그인 감지: `claude auth status --json`, `codex login status`.
 - 0개 → 로그인 화면. 1개 → 묻지 않고 그걸 쓴다. 2개 → 한 번 묻고 기본 엔진으로 저장, 설정에서 바꿀 수 있다.
-- 로그인은 `claude auth login`, `codex login --device-auth`. HackMac은 토큰을 읽지도 저장하지도 않는다.
-- 엔진 실행: `claude`를 `--input-format stream-json --output-format stream-json`으로 상주시키고 글을 한 줄씩 넣는다(VS Code 확장과 같은 방식). 채팅 화면은 직접 만든다.
+- 로그인은 `claude auth login --claudeai`(브라우저가 준 코드를 화면에서 받아 CLI에 넣는다), `codex login`(브라우저 + localhost:1455 콜백). `--device-auth`는 쓰지 않는다: 사용자가 ChatGPT 설정에서 미리 켜야 한다. HackMac은 토큰을 읽지도 저장하지도 않는다. 저장된 엔진이 로그아웃되면 남은 쪽을 쓰고 알린다. 구현: `modules/account/`.
+- 엔진 실행(`modules/conversation/`, 공통 인터페이스 하나 + 어댑터 둘):
+  - Claude: `claude -p --input-format stream-json --output-format stream-json`을 상주시키고 글을 한 줄씩 넣는다(VS Code 확장과 같은 방식). `--permission-mode dontAsk --strict-mcp-config`. 중단은 stream-json `control_request{subtype:interrupt}`(실제 2.1.318에서 프로세스를 안 죽이고 멈춤 확인).
+  - Codex: `codex app-server --listen stdio://` JSON-RPC. thread는 `approvalPolicy:never`, `sandbox:workspace-write`. 오는 승인 요청은 전부 거절로 자동 응답한다(안 하면 턴이 멈춘다). 중단은 `turn/interrupt`.
+  - 일하는 중 보낸 글은 어댑터가 줄 세웠다가 턴이 끝나면 보낸다(Claude는 진행 중 글이 그 턴에 합쳐지는지 결과만 보고는 알 수 없었다, 스튜디오 2026-11-02 실측).
+  - 실제 CLI 시험: `HACKMAC_REAL_ENGINES=1 npx vitest run modules/conversation/real.test.ts`(짧은 답·세션 이어 열기·중단, 두 회사 모두 통과 2026-11-06).
+- 채팅 화면은 직접 만든다.
 
 ### 6.2 계정 전환
 

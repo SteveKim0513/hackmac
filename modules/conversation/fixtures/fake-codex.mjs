@@ -1,0 +1,55 @@
+// 시험용 가짜 `codex app-server --listen stdio://`. codex-cli 0.164.0 실측 순서를 흉내 낸다.
+//   보통 글: commentary 항목 하나 + final_answer 항목("echo:<글>")을 낸 뒤 turn/completed
+//   "approve": 명령 승인 요청을 보내고 답을 받은 뒤 그 decision을 답에 넣는다
+//   "slow": turn/interrupt가 올 때까지 기다렸다가 interrupted로 끝낸다
+//   "die": 코드 3으로 끝난다
+import { createInterface } from 'node:readline';
+
+const out = (o) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...o }) + '\n');
+const note = (method, params) => out({ method, params });
+let thread = null;
+let turnN = 0;
+let slow = null;
+const waitingServer = new Map();
+
+const finish = (turnId, status, items) => note('turn/completed', { threadId: thread, turn: { id: turnId, items, status, error: null } });
+
+const runTurn = async (turnId, text) => {
+  note('turn/started', { threadId: thread, turn: { id: turnId, items: [], status: 'inProgress' } });
+  if (text === 'die') { process.stderr.write('죽음\n'); process.exit(3); }
+  if (text === 'slow') { slow = turnId; return; }
+  let answer = `echo:${text}`;
+  if (text === 'approve') {
+    const decision = await new Promise((resolve) => { waitingServer.set('srv-1', resolve); out({ id: 'srv-1', method: 'item/commandExecution/requestApproval', params: { threadId: thread, turnId, itemId: 'cmd1', command: 'rm -rf /' } }); });
+    answer = `decision:${decision.decision}`;
+  }
+  note('item/started', { threadId: thread, turnId, item: { type: 'agentMessage', id: 'c1', text: '', phase: 'commentary' } });
+  note('item/agentMessage/delta', { threadId: thread, turnId, itemId: 'c1', delta: '살펴보는 중' });
+  note('item/started', { threadId: thread, turnId, item: { type: 'commandExecution', id: 'x1' } });
+  note('item/started', { threadId: thread, turnId, item: { type: 'agentMessage', id: 'a1', text: '', phase: 'final_answer' } });
+  note('item/agentMessage/delta', { threadId: thread, turnId, itemId: 'a1', delta: answer.slice(0, 5) });
+  note('item/agentMessage/delta', { threadId: thread, turnId, itemId: 'a1', delta: answer.slice(5) });
+  note('account/rateLimits/updated', { rateLimits: { primary: { usedPercent: 3, windowDurationMins: 300, resetsAt: 1793946175 }, secondary: { usedPercent: 100, windowDurationMins: 10080, resetsAt: 1794460954 } } });
+  finish(turnId, 'completed', [{ type: 'agentMessage', id: 'c1', text: '살펴보는 중', phase: 'commentary' }, { type: 'agentMessage', id: 'a1', text: answer, phase: 'final_answer' }]);
+};
+
+createInterface({ input: process.stdin }).on('line', (line) => {
+  const m = JSON.parse(line);
+  if (m.id !== undefined && !m.method) { waitingServer.get(m.id)?.(m.result); waitingServer.delete(m.id); return; }
+  if (m.method === 'initialize') return out({ id: m.id, result: { userAgent: 'fake', platformOs: 'macos' } });
+  if (m.method === 'initialized') return;
+  if (m.method === 'thread/start') { thread = 'thread-new'; return out({ id: m.id, result: { thread: { id: thread, cwd: m.params.cwd }, sandbox: m.params.sandbox, approvalPolicy: m.params.approvalPolicy } }); }
+  if (m.method === 'thread/resume') { thread = m.params.threadId; return out({ id: m.id, result: { thread: { id: thread } } }); }
+  if (m.method === 'turn/start') {
+    const turnId = `turn-${++turnN}`;
+    out({ id: m.id, result: { turn: { id: turnId, items: [], status: 'inProgress' } } });
+    void runTurn(turnId, m.params.input[0].text);
+    return;
+  }
+  if (m.method === 'turn/interrupt') {
+    out({ id: m.id, result: {} });
+    if (slow === m.params.turnId) { slow = null; finish(m.params.turnId, 'interrupted', []); }
+    return;
+  }
+  out({ id: m.id, error: { code: -32601, message: `unknown ${m.method}` } });
+});

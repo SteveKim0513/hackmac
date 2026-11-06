@@ -49,7 +49,14 @@ Claude 어댑터와 다른 점(대화 모듈의 어댑터 인터페이스가 흡
 
 Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두 현행 공식. v2.1.302부터 `-p` 기본 권한 모드가 Manual(명시 안 하면 거부) — `dontAsk` 명시로 영향 없음. `--permission-prompts none`, `--bare`(OAuth 안 읽음, 쓰면 안 됨), `--restricted`가 새로 있음. 샌드박스는 CLI 플래그가 아니라 설정(`sandbox.enabled`, `permissions.blockWritesOutsideWorkingDirectories` 등), 1회성은 `--settings '{"sandbox":{...}}'`.
 
-**[스파이크]** `codex app-server generate-json-schema`로 설치 버전의 스키마를 뽑아 `turn/start` 응답과 `item/agentMessage/delta`의 정확한 필드명 고정. 오래 띄운 app-server의 메모리 안정성.
+**[스파이크 → 해결 2026-11-06]** 0.164.0에서 스키마를 뽑고 실제 한 턴을 돌려 확인했다.
+- `turn/start` 응답: `{turn:{id, status:"inProgress", items:[]}}`. 같은 번호가 `turn/started` 알림으로도 온다.
+- **phase는 delta가 아니라 항목에 붙는다**: `item/started{item:{type:"agentMessage", id, phase:"final_answer"|"commentary"}}` 뒤에 `item/agentMessage/delta{itemId, delta}`. 어댑터가 itemId별 phase를 기억한다.
+- `turn/completed{turn:{status:"completed"|"interrupted"|"failed", items, error:{message}|null}}`. 최종 답은 items의 agentMessage(commentary 제외) text.
+- 한도: `account/rateLimits/updated{rateLimits:{primary:{usedPercent, windowDurationMins:300, resetsAt(초)}, secondary:{… 10080 …}}}`.
+- 승인 응답 모양: commandExecution·fileChange → `{decision:"decline"}`, 옛 applyPatch/execCommand → `{decision:"denied"}`, permissions → `{permissions:{}, scope:"turn"}`, requestUserInput → `{answers:{}}`, elicitation → `{action:"decline"}`, tool/call → `{contentItems:[], success:false}`.
+- 사용자의 `~/.codex/config.toml`에 있는 MCP 서버가 thread마다 같이 뜬다(이 Mac: codex_apps, cua_repl). 지금은 그대로 둔다. 앱 제작이 사용자 MCP에 기대지 않게 할지 4단계에서 정한다.
+- 남은 것: 오래 띄운 app-server의 메모리 안정성.
 
 ## 4. 상주 프로세스
 
@@ -77,5 +84,5 @@ Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두
 3. launchd가 exec한 HackMac에서 Tray·globalShortcut·Notification·`app.dock.show()`가 되는지.
 4. 권한 프롬프트가 "HackMac" 이름으로 뜨고 HackMac 항목에 저장되는지.
 5. `--role=studio` 두 번째 실행 때 단일 인스턴스 락·Dock·Cmd-Tab 동작.
-6. Codex app-server 스키마 고정(3절).
+6. ~~Codex app-server 스키마 고정(3절).~~ 해결(3절).
 7. electron-updater가 번들을 교체한 뒤 launchd가 새 바이너리로 재시작하는지.
