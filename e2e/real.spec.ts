@@ -14,8 +14,46 @@ test.afterEach(async () => {
   handle = null;
 });
 
+const onlyVendor = process.env.HACKMAC_REAL_VENDOR;
+
 for (const vendor of ['claude', 'codex'] as const) {
+  test(`진짜 ${vendor}: 단순한 앱을 처음부터 끝까지 만든다(평가·검증·설치)`, async () => {
+    test.skip(Boolean(onlyVendor) && onlyVendor !== vendor);
+    test.setTimeout(1_200_000);
+    handle = await launchApp({ real: true });
+    const { page } = handle;
+    const ask = page.locator('.onboarding h1');
+    const create = page.locator('.create-app-button');
+    await expect(ask.or(create)).toBeVisible({ timeout: 30_000 });
+    if (await ask.isVisible()) await page.locator(`.vendor-card[data-vendor="${vendor}"] button`).click();
+    await create.click();
+    const say = async (text: string) => {
+      await page.locator('.composer textarea').fill(text);
+      await page.locator('.composer textarea').press('Enter');
+    };
+    await say('단축키를 누르면 오늘 날짜와 요일을 알림 배너로 보여 주는 앱을 만들어 줘. 설정은 필요 없어. 요구는 이게 전부고, 확인 질문 없이 바로 끝까지 만들어 줘.');
+    const done = page.locator('.build-box.is-done');
+    for (let turn = 0; turn < 6 && !(await done.isVisible()); turn++) {
+      // 답이 끝날 때까지 기다린다(보내기 버튼이 돌아오면 쉬는 중)
+      await expect(page.locator('.composer button[type="submit"]')).toBeVisible({ timeout: 900_000 });
+      const last = await page.locator('.bubble-assistant').last().textContent();
+      console.log(`[${vendor} 턴 ${turn + 1}] ${last?.slice(0, 400)}`);
+      if (await done.isVisible()) break;
+      await say('네, 그대로 진행해 주세요. 끝까지 만들어서 설치해 주세요.');
+    }
+    const state = await page.evaluate(async () => {
+      const ts = await window.studio.threads();
+      return window.studio.build(ts[0].meta.id);
+    });
+    console.log(`[${vendor}] 최종 상태`, JSON.stringify({ step: state?.step, req: state?.requirements, verdict: state?.verdict?.kind, gate: state?.gate?.ok, installed: state?.installed, log: state?.log.map((l) => l.text) }, null, 1));
+    await expect(done).toBeVisible();
+    await page.locator('.build-box.is-done button').click();
+    await expect(page.locator('.detail-page')).toBeVisible();
+    console.log(`[${vendor}] 앱 이름: ${await page.locator('.detail-page h1').textContent()} · 단축키: ${(await page.locator('.shortcut-table tbody tr').allTextContents()).join(' | ')}`);
+  });
+
   test(`진짜 ${vendor}: 앱 만들기 → 요구를 말하면 한국어로 되묻는다`, async () => {
+    test.skip(Boolean(onlyVendor) && onlyVendor !== vendor);
     handle = await launchApp({ real: true });
     const { page } = handle;
     const ask = page.locator('.onboarding h1');

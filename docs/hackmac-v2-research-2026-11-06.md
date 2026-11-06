@@ -75,6 +75,25 @@ Claude 쪽 변경 확인: 스튜디오 `engine.ts`의 플래그 조합은 모두
 
 권한 승인 창 이름: TCC는 책임 프로세스(responsible process)의 이름을 쓴다. launchd가 번들 안 `HackMac` 바이너리를 직접 띄우면 HackMac이 책임 프로세스이고 `zsh → osascript` 자식은 이를 상속해 "HackMac"으로 뜬다(DTS 답변 + v1 동작과 일치, launchd 경로는 실측 필요). `NSAppleEventsUsageDescription`은 상주 번들 Info.plist에 있어야 한다.
 
+## 4.5 제작 에이전트 격리 실측 (계획서 10.1)
+
+에이전트는 승인 없이 돌되 작업 폴더 밖에 쓰지 못해야 한다. claude 2.1.318·codex 0.164.0으로 같은 다섯 동작을 시켜 봤다.
+
+| 동작 | Claude 샌드박스 + `Write`·`Edit` 무제한 | Claude 샌드박스 + `Write(./**)`·`Edit(./**)` | Codex `workspace-write` |
+|---|---|---|---|
+| 작업 폴더 안 파일 도구 쓰기 | 됨 | 됨(작업 폴더가 실제 경로일 때만) | — |
+| **홈에 파일 도구 쓰기** | **됨(샌드박스를 안 거침)** | 거부 | — |
+| 홈에 셸 쓰기 | 막힘(operation not permitted) | 막힘 | 막힘 |
+| 작업 폴더 안 셸 쓰기 | 됨 | 됨 | 됨 |
+| 셸에서 Electron을 Node로 돌려 작업 폴더에 쓰기 | 됨 | 됨 | 됨 |
+
+**[결정]**
+- Claude: `--settings '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,"allowUnsandboxedCommands":false}}'` + `--allowedTools Bash,Read,Glob,Grep,Edit(./**),Write(./**),WebFetch,WebSearch` + `dontAsk`. **샌드박스는 셸만 막는다** — 파일 도구 범위는 권한 규칙으로 따로 좁혀야 한다(`modules/build/agent.ts`).
+- 작업 폴더는 `realpath`로 넘긴다. `/var/folders/…`(→ `/private/var/…` 링크) 아래에서는 `Write(./**)`가 작업 폴더 안 쓰기까지 막았다.
+- Codex: thread `sandbox: workspace-write`만으로 충분. 엔진에 준 환경변수(`HACKMAC_*`)가 셸까지 간다.
+- 에이전트 ↔ HackMac 통로는 소켓이 아니라 작업 폴더 안 파일(`.hackmac/inbox`·`outbox`). 두 샌드박스 모두에서 된다(`modules/build/inbox.ts`).
+- 남은 것: Claude 샌드박스 셸의 네트워크는 막혀 있다(개발 중 curl로 API를 시험하지 못함). 검증 게이트의 시험은 HackMac이 샌드박스 밖에서 돌려 네트워크가 된다. 개발 중 네트워크가 필요한지 실제 앱을 만들며 본다.
+
 ## 5. 남은 스파이크
 
 실제 서명 빌드로 돌려 봐야 아는 것. 첫 패키지 빌드 때 한 번에 확인한다.
