@@ -38,7 +38,7 @@ export interface PipelineDeps {
 }
 
 export type PipelineOutcome =
-  | { ok: true; appId: string; version: number; audit: AuditResult; manual: RubricItem[]; rounds: number }
+  | { ok: true; appId: string; name: string; version: number; audit: AuditResult; manual: RubricItem[]; rounds: number }
   | { ok: false; stage: string; reason: string; cancelled: boolean };
 
 class Cancelled extends Error {}
@@ -170,7 +170,9 @@ export async function runPipeline(d: PipelineDeps, signal: AbortSignal): Promise
         const r = d.install();
         if (!r.ok) return fail(stage, `설치하지 못했어요: ${r.errors.join('; ')}`);
         d.record({ type: 'pipeline', status: 'done' });
-        return { ok: true, appId: r.id, version: r.version, audit, manual: rubric.filter((x) => x.how === 'manual'), rounds: round };
+        let name = r.id;
+        try { name = String((JSON.parse(readFileSync(join(pkg, 'manifest.json'), 'utf8')) as { name?: unknown }).name ?? r.id); } catch { /* 선언은 게이트가 이미 봤다 */ }
+        return { ok: true, appId: r.id, name, version: r.version, audit, manual: rubric.filter((x) => x.how === 'manual'), rounds: round };
       }
       if (round >= maxRounds) {
         const reason = `${maxRounds}번 보완해도 다음이 남았어요: ${problems.slice(0, 3).join(' / ')}`;
@@ -257,7 +259,8 @@ export const outcomeText = (o: PipelineOutcome): string => {
   }
   const goals = o.audit.items.filter((x) => x.kind === 'goal');
   return [
-    `[HackMac 제작 결과] 설치함: ${o.appId}(이 맥의 ${o.version}번째 버전).${o.rounds ? ` 검증·감사에서 걸린 것을 ${o.rounds}번 보완했다.` : ''}`,
+    `[HackMac 제작 결과] 설치함: "${o.name}"(id ${o.appId}, 이 맥의 ${o.version}번째 버전). 홈의 내 앱에 "${o.name}" 카드로 보인다.${o.rounds ? ` 검증·감사에서 걸린 것을 ${o.rounds}번 보완했다.` : ''}`,
+    '단축키는 아직 정해지지 않았다: 사용자가 카드를 눌러 켤 때 HackMac이 비어 있는 자리(⌥1부터)를 배정하고, 카드와 앱 상세의 단축키 표에 보인다. 키를 지어내지 말고 그렇게 안내한다.',
     '확인한 것(다른 역할의 감사가 코드에서 근거를 찾음):',
     ...goals.map((g) => `  - ${g.id} ${g.label}: ${g.evidence}`),
     ...(o.manual.length

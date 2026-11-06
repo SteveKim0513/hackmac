@@ -172,7 +172,8 @@ describe('Builder(진짜 hackmac-build 클라이언트로)', () => {
     expect(s).toMatchObject({ step: 6, installed: { appId: 'my.today' }, pipeline: { status: 'done' }, rubric: { by: 'codex' }, audit: { ok: true, by: 'codex' } });
     expect(s.rubric!.items.map((x) => x.id)).toEqual(['R1.1', 'R1.2']);
     // 결과 글은 확인한 것과 못 한 것을 나눈다
-    expect(text).toContain('설치함: my.today');
+    expect(text).toContain('설치함: "오늘 날짜"(id my.today');
+    expect(text).toContain('켤 때 HackMac이 비어 있는 자리');
     expect(text).toContain('R1 단축키를 누르면 오늘 날짜를 알림으로: scripts/show.sh가 date로');
     expect(text).toContain('자동으로 확인하지 못한 것(사람이 봐야 함)');
     expect(text).toContain('R1.1 단축키를 누르면 오늘 날짜(YYYY-MM-DD)가 알림으로 뜬다');

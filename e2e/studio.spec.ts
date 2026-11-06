@@ -78,7 +78,7 @@ for (const vendor of ['claude', 'codex'] as const) {
     await expect(page.locator('.step-list li.is-done')).toHaveCount(5);
     await page.locator('.build-log summary').click();
     await expect(page.locator('.build-log')).toContainText('가능성 평가: possible');
-    await expect(page.locator('.bubble-assistant').last()).toContainText('설치함: my.today', { timeout: 10_000 });
+    await expect(page.locator('.bubble-assistant').last()).toContainText('설치함: "오늘 날짜"(id my.today', { timeout: 10_000 });
     // 사용자에게서 캐낸 합격 기준이 요구사항 아래에 남는다
     await expect(page.locator('.req-accept')).toContainText('날짜가 YYYY-MM-DD로 보인다');
     // 만들기 전에 다른 역할이 정한 채점표, 그 표로 채점한 목표 확인, 직접 확인할 것을 나눠 보인다
