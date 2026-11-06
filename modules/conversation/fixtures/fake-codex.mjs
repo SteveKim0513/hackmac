@@ -5,6 +5,13 @@
 //   "die": 코드 3으로 끝난다
 import { createInterface } from 'node:readline';
 
+// `codex login status`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
+if (process.argv[2] === 'login' && process.argv[3] === 'status') {
+  if (process.env.HACKMAC_FAKE_LOGGED_OUT === '1') { process.stderr.write('Not logged in\n'); process.exit(1); }
+  process.stderr.write('Logged in using ChatGPT\n');
+  process.exit(0);
+}
+
 const out = (o) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...o }) + '\n');
 const note = (method, params) => out({ method, params });
 let thread = null;

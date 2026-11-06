@@ -9,7 +9,7 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanEnv, resolveBin, type Vendor } from './cli.ts';
+import { envFor, resolveBin, type Vendor } from './cli.ts';
 
 export interface LoginView {
   state: 'pending' | 'done' | 'failed';
@@ -70,7 +70,7 @@ export const createLogins = (deps: LoginDeps = { spawn: nodeSpawn, bin: (n) => r
       }
       const args = loginArgs(vendor);
       log(id, `시작: ${bin} ${args.join(' ')} (${Object.entries(env).map(([k, v]) => `${k}=${v}`).join(' ') || '기본 계정'})`);
-      const child = deps.spawn(bin, args, { env: cleanEnv(env), stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = deps.spawn(bin, args, { env: envFor(bin, env), stdio: ['pipe', 'pipe', 'pipe'] });
       const job: Job = { child, out: '', view: { state: 'pending', url: null, needsCode: false, output: '' } };
       jobs.set(id, job);
       let settled = false;

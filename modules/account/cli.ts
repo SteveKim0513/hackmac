@@ -5,7 +5,7 @@
 import { accessSync, constants, existsSync, readdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 export type Vendor = 'claude' | 'codex';
 export const VENDORS: readonly Vendor[] = ['claude', 'codex'];
@@ -33,6 +33,17 @@ export const cleanEnv = (extra: Record<string, string> = {}, base: NodeJS.Proces
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) if (v !== undefined && !API_KEY_VARS.has(k) && !SESSION_MARKER.test(k)) out[k] = v;
   return { ...out, ...extra };
+};
+
+/**
+ * 그 CLI를 부를 자식 환경. CLI가 있는 폴더를 PATH 맨 앞에 붙인다: npm·fnm·nvm으로 깐 codex는 `#!/usr/bin/env node`
+ * 스크립트라, Finder·launchd로 뜬 HackMac(터미널 PATH 없음)에서는 같은 폴더의 node를 찾지 못해 뜨지 않는다.
+ */
+export const envFor = (bin: string, extra: Record<string, string> = {}, base: NodeJS.ProcessEnv = process.env): Record<string, string> => {
+  const env = cleanEnv(extra, base);
+  const dir = dirname(bin);
+  const rest = (env.PATH ?? '').split(delimiter).filter((p) => p && p !== dir);
+  return { ...env, PATH: [dir, ...rest, '/usr/bin', '/bin'].filter((p, i, a) => a.indexOf(p) === i).join(delimiter) };
 };
 
 /** 기본 계정이 아니면 그 계정의 설정 폴더를 CLI에 알려 주는 환경변수 */
@@ -119,9 +130,9 @@ export const cliStatus = async (
   const bin = deps.bin(vendor);
   if (!bin) return { installed: false, bin: null, status: null };
   if (vendor === 'claude') {
-    const r = await deps.run(bin, ['auth', 'status', '--json'], cleanEnv(env));
+    const r = await deps.run(bin, ['auth', 'status', '--json'], envFor(bin, env));
     return { installed: true, bin, status: parseClaudeStatus(r.out) };
   }
-  const r = await deps.run(bin, ['login', 'status'], cleanEnv(env));
+  const r = await deps.run(bin, ['login', 'status'], envFor(bin, env));
   return { installed: true, bin, status: parseCodexStatus(r.code, r.out) };
 };

@@ -6,6 +6,14 @@
 import { createInterface } from 'node:readline';
 
 const argv = process.argv.slice(2);
+// `claude auth status --json`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
+if (argv[0] === 'auth' && argv[1] === 'status') {
+  const out = process.env.HACKMAC_FAKE_LOGGED_OUT === '1'
+    ? { loggedIn: false, authMethod: 'none' }
+    : { loggedIn: true, authMethod: 'claude.ai', email: 'fake@example.com', orgId: 'org', subscriptionType: 'max' };
+  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+  process.exit(out.loggedIn ? 0 : 1);
+}
 const resume = argv.includes('--resume') ? argv[argv.indexOf('--resume') + 1] : null;
 const session = resume ?? 'sess-new';
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');

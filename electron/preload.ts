@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
+import type { AccountsView, ChatEvent, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
@@ -21,6 +22,36 @@ const api = {
 export type PlaybookApi = typeof api;
 
 contextBridge.exposeInMainWorld('playbook', api);
+
+// 작업실(계정·스레드·채팅). electron/studioHost.ts의 IPC와 짝이다.
+const studioApi = {
+  accounts: (refresh = false): Promise<AccountsView> => ipcRenderer.invoke('accounts:get', refresh),
+  chooseEngine: (v: Vendor): Promise<AccountsView> => ipcRenderer.invoke('accounts:choose', v),
+  onAccountsChanged: (cb: (a: AccountsView) => void): (() => void) => {
+    const h = (_e: unknown, a: AccountsView) => cb(a);
+    ipcRenderer.on('accounts:changed', h);
+    return () => ipcRenderer.removeListener('accounts:changed', h);
+  },
+  loginStart: (v: Vendor): Promise<LoginView> => ipcRenderer.invoke('login:start', v),
+  loginState: (v: Vendor): Promise<LoginView | null> => ipcRenderer.invoke('login:state', v),
+  loginSubmit: (v: Vendor, code: string): Promise<LoginView | null> => ipcRenderer.invoke('login:submit', v, code),
+  loginCancel: (v: Vendor): Promise<void> => ipcRenderer.invoke('login:cancel', v),
+  openUrl: (url: string): Promise<void> => ipcRenderer.invoke('login:openUrl', url),
+  threads: (): Promise<ThreadView[]> => ipcRenderer.invoke('threads:list'),
+  createThread: (title: string): Promise<ThreadMeta> => ipcRenderer.invoke('threads:create', title),
+  thread: (id: string): Promise<ThreadView | null> => ipcRenderer.invoke('threads:get', id),
+  send: (id: string, text: string): Promise<SendResult> => ipcRenderer.invoke('chat:send', id, text),
+  interrupt: (id: string): Promise<void> => ipcRenderer.invoke('chat:interrupt', id),
+  onChat: (cb: (threadId: string, e: ChatEvent) => void): (() => void) => {
+    const h = (_e: unknown, p: { threadId: string; event: ChatEvent }) => cb(p.threadId, p.event);
+    ipcRenderer.on('chat:event', h);
+    return () => ipcRenderer.removeListener('chat:event', h);
+  },
+};
+
+export type StudioApi = typeof studioApi;
+
+contextBridge.exposeInMainWorld('studio', studioApi);
 
 // electron/popupWindow.ts가 띄우는 별도 팝업 창(src/popup/PopupApp.tsx)에서만
 // 쓰는 최소 브리지 — 메인 창의 `playbook`과 성격이 달라 이름을 분리했다.

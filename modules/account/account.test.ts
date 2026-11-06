@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chooseEngine } from './choose.ts';
-import { accountEnv, cleanEnv, cliStatus, parseClaudeStatus, parseCodexStatus, resolveBin, searchDirs } from './cli.ts';
+import { accountEnv, cleanEnv, cliStatus, envFor, parseClaudeStatus, parseCodexStatus, resolveBin, searchDirs } from './cli.ts';
 import { createLogins, fileLogger } from './login.ts';
 
 let tmp: string;
@@ -27,6 +27,11 @@ describe('cli', () => {
   it('API 키와 세션 표지를 뗀다', () => {
     const env = cleanEnv({ X: '1' }, { PATH: '/bin', ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'x', ELECTRON_RUN_AS_NODE: '1', HOME: '/h' });
     expect(env).toEqual({ PATH: '/bin', HOME: '/h', X: '1' });
+  });
+
+  it('CLI 폴더를 PATH 맨 앞에 붙이고 키는 뗀다(launchd처럼 PATH가 없어도)', () => {
+    expect(envFor('/u/.fnm/bin/codex', {}, { OPENAI_API_KEY: 'k' })).toEqual({ PATH: '/u/.fnm/bin:/usr/bin:/bin' });
+    expect(envFor('/x/claude', { CLAUDE_CONFIG_DIR: '/c' }, { PATH: '/a:/x:/usr/bin' })).toEqual({ PATH: '/x:/a:/usr/bin:/bin', CLAUDE_CONFIG_DIR: '/c' });
   });
 
   it('기본 계정이 아니면 설정 폴더 변수', () => {

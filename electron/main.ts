@@ -9,6 +9,7 @@ import { checkForUpdatesManually, initAutoUpdate } from './updater';
 import { appLog, describeError } from './log';
 import { startPopupServer, stopPopupServer } from './popupServer';
 import { activateService, createPlatform, listServices, themeOf } from './platformHost';
+import { startStudio } from './studioHost';
 import type { Platform } from '../modules/platform/platform';
 import type { ThemePreference } from '../shared/types';
 
@@ -61,6 +62,7 @@ if (!gotSingleInstanceLock) app.quit();
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let platform: Platform | null = null;
+let studio: { stop: () => Promise<void> } | null = null;
 
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -147,6 +149,7 @@ app.whenReady().then(() => {
 
   // 보관소·설정·원장을 먼저 세워야 테마(설정)와 단축키 복원이 가능하다.
   platform = createPlatform();
+  studio = startStudio(platform);
 
   // 창을 만들기 전에 먼저 적용해야 위 backgroundColor 계산과 트래픽라이트
   // 등 네이티브 크롬이 처음부터 올바른 밝기로 뜬다.
@@ -249,7 +252,9 @@ app.on('before-quit', (e) => {
   e.preventDefault();
   appLog.info('main', '앱 종료 — 실행기 정리 중');
   const p = platform;
+  const s = studio;
   platform = null;
+  studio = null;
   const done = () => {
     stopPopupServer();
     appLog.info('main', '앱 종료');
@@ -259,7 +264,7 @@ app.on('before-quit', (e) => {
     appLog.warn('main', '실행기 정리가 5초 안에 안 끝나 그대로 종료');
     done();
   }, 5000);
-  void (p ? p.shutdown() : Promise.resolve())
+  void Promise.all([p?.shutdown(), s?.stop()])
     .catch((err) => appLog.error('main', `실행기 정리 실패: ${describeError(err)}`))
     .finally(() => {
       clearTimeout(guard);

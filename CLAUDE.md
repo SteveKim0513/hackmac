@@ -33,6 +33,7 @@ npm run release       # test:e2e 통과가 전제 + dist와 동일 + GitHub Rele
 - 완료 주장 전 최소 `npm run typecheck` (UI·electron 변경 시 `npm run build`까지) 실행.
 - UI/Electron 변경은 `npm run dev`로 실제 창을 띄워 확인한다.
 - **팝업(선택/입력/확인) 로직을 바꿨다면 `npm run test:e2e`로도 확인한다.** `npm run dev`로 실제 단축키를 눌러 확인하는 것과 별개로, 이 테스트는 사람 없이도 서비스 스크립트가 실제로 부르는 CLI(`resources/bin/hackmac-popup`)로 요청을 보내고 뜬 창을 직접 클릭/타이핑해 검증한다 — `npm run dist`/`release`가 이 통과를 전제로 하므로, 팝업이 깨진 채로는 애초에 배포 커맨드가 끝까지 진행되지 않는다. 자세한 구조와 함정(`app.getAppPath()`, `keyboard.press()` vs `.down()`)은 [docs/e2e.md](docs/e2e.md) 참고 — [mind-map-mac](../mind-map)의 `make pre-release`와 같은 발상이다.
+- **E2E는 진짜 claude/codex 대신 가짜 CLI를 쓴다.** `e2e/helpers.ts`의 `launchApp({ claude, codex })`가 `modules/conversation/fixtures/fake-*.mjs`를 감싼 스크립트 폴더를 만들고 `HACKMAC_CLI_DIRS`로 넘긴다(`electron/studioHost.ts`는 이 변수가 있으면 그 폴더에서만 CLI를 찾는다). 기본은 Claude만 로그인 — 그래서 기존 스토어 시험은 첫 실행 화면 없이 홈으로 간다. 진짜 엔진으로 실제 창에서 대화해 보려면 `HACKMAC_REAL_ENGINES=1 npx playwright test e2e/real.spec.ts`(구독 사용량을 조금 쓴다).
 - 패키지 매니저는 npm만 쓴다.
 - `npm run dev`/`dist`는 각각 `predev`/`predist` 훅으로 `kill:dev`(이 프로젝트의 `node_modules/electron/dist/Electron.app` 경로로 실행 중인 dev 프로세스를 찾아 종료)를 자동 실행한다.
 
@@ -85,6 +86,10 @@ modules/ledger/          ─ 추가 전용 JSONL 사건 원장
 modules/settings/        ─ v2 settings.json(안전 쓰기, 깨진 파일 사본)
 modules/account/         ─ claude/codex CLI 찾기·로그인 상태·로그인 흐름·엔진 고르기 (토큰은 안 만짐, API 키 env는 늘 뗌)
 modules/conversation/    ─ 대화 엔진 공통 인터페이스 + Claude(stream-json)·Codex(app-server) 어댑터. 실제 CLI 시험은 HACKMAC_REAL_ENGINES=1
+modules/thread/          ─ 스레드 보관(스레드 하나 = 앱 하나, userData/threads/<id>/: thread.json·messages.jsonl·work/)
+modules/studio/chat.ts   ─ 스레드마다 엔진을 이어 열고 대화를 쌓는다. 스레드는 처음 회사를 지킨다
+electron/studioHost.ts   ─ 계정·스레드·채팅 IPC. 지금은 실행 서버와 같은 메인 프로세스에서 돈다(--role=studio 분리는 이 파일만 옮기면 됨)
+src/studio/              ─ 첫 실행 엔진 선택·로그인(Onboarding), 스레드 화면(왼쪽 단계 + 오른쪽 채팅)
 shared/manifest.ts       ─ v2 앱 선언 타입과 검증
 build/launchd/           ─ 상주 agent plist (electron-builder extraFiles로 Contents/Library/LaunchAgents에 들어감)
 electron/preload.ts     ─ contextBridge로 window.playbook / window.hackmacPopup API 노출

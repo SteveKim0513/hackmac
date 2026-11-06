@@ -36,9 +36,10 @@ export abstract class BaseConversation implements Conversation {
 
   protected emit(e: ConversationEvent): void {
     if (e.kind === 'ready') this.session = e.session;
+    // 듣는 쪽이 turnEnd를 받는 순간 busy를 물으면 이미 false여야 한다(줄 선 글이 있으면 그것 때문에 true)
+    if (e.kind === 'turnEnd') this.turnActive = false;
     for (const cb of this.listeners) cb(e);
-    if (e.kind === 'turnEnd') {
-      this.turnActive = false;
+    if (e.kind === 'turnEnd' && !this.turnActive) {
       const next = this.queue.shift();
       if (next !== undefined) this.dispatch(next);
     }
