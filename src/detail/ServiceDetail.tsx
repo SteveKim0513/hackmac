@@ -2,17 +2,12 @@ import type { ServiceMeta } from '../../shared/types';
 
 interface Props {
   service: ServiceMeta;
-  onBack: () => void;
   onToggle: (service: ServiceMeta) => void;
 }
 
-export function ServiceDetail({ service, onBack, onToggle }: Props) {
+export function ServiceDetail({ service, onToggle }: Props) {
   return (
     <div className="detail-page" style={{ ['--accent' as string]: service.accentColor }}>
-      <button className="back-button" onClick={onBack}>
-        ← 스토어로
-      </button>
-
       <header className="detail-header">
         <div className="detail-icon">{service.icon}</div>
         <div className="detail-heading">

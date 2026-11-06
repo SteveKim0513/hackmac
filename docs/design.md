@@ -66,7 +66,11 @@ App Store는 무채색 카드를 진한 테두리로 구분하지 않고 **옅�
 
 키보드 포커스는 브라우저 기본 파란 링이 아니라 `--accent-default` 2px 아웃라인을 쓴다(`:focus-visible`이라 마우스 클릭에는 안 뜨고 키보드 탐색에서만 뜬다) — macOS 네이티브 포커스 링과 같은 색이라 튀지 않는다.
 
-메인 창은 `titleBarStyle: 'hiddenInset'`이라 macOS 트래픽라이트(닫기/최소화/최대화)가 콘텐츠 위에 떠 있다. `electron/main.ts`가 `trafficLightPosition: { x: 20, y: 20 }`으로 위치를 고정하고, `.app-shell`이 왼쪽에만 92px 여백(`padding: 28px 36px 60px 92px`)을 둬서 "HackMac" 제목이 트래픽라이트와 붙어 보이지 않게 한다 — OS 기본값에 맡기면 이 간격이 macOS 버전마다 달라진다.
+메인 창은 `titleBarStyle: 'hiddenInset'`이라 OS 타이틀바가 없다. 대신 맨 위 52px 띠 `.titlebar`가 macOS 통합 툴바(Big Sur 이후 App Store·Finder) 역할을 한다 — `-webkit-app-region: drag`라 이 띠를 잡고 창을 끌 수 있고, 더블클릭하면 시스템 설정대로 확대된다. 띠 안의 버튼은 `no-drag`로 빼야 클릭이 먹는다. 새 툴바 컨트롤을 추가할 때 이걸 빠뜨리면 버튼이 안 눌린다.
+
+- 트래픽라이트는 `electron/main.ts`의 `trafficLightPosition: { x: 20, y: 18 }`로 고정하고, `.titlebar`는 왼쪽에 84px 여백을 둬 그 뒤에 이어 붙는다. y:18은 실제 창 스크린샷으로 툴바 버튼(26px 캡슐)과 세로 중심을 맞춘 값이다.
+- 왼쪽: 상세 화면에서만 뒤로 가기 셰브런(28px, 아이콘만)과 서비스 이름(13px/600). 오른쪽: 테마 세그먼트 컨트롤 · 업데이트 확인 · 로그 보기 — 모든 화면에 고정.
+- 스크롤은 창 전체가 아니라 툴바 아래 `.app-content`만 한다. 평소엔 툴바 경계선이 없고, 본문이 툴바 아래로 스크롤되면 헤어라인(`--border`)이 생긴다(네이티브 툴바와 같은 동작).
 
 ### 팝업 (선택 · 입력 · 확인)
 
