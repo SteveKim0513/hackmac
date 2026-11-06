@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { BundlePick, MaintenanceView } from '../shared/studio';
+import type { AppSettingsView, BundlePick, MaintenanceView } from '../shared/studio';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
 import type { AccountsView, RecipeView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
@@ -10,6 +10,10 @@ const api = {
   applyFix: (fixId: string): Promise<{ ok: true; version: number } | { ok: false; error: string }> => ipcRenderer.invoke('maintenance:apply', fixId),
   dismissFix: (fixId: string): Promise<boolean> => ipcRenderer.invoke('maintenance:dismiss', fixId),
   setAutoApply: (on: boolean): Promise<boolean> => ipcRenderer.invoke('maintenance:setAuto', on),
+  /** 앱 상세의 설정 화면 */
+  appSettings: (appId: string): Promise<AppSettingsView> => ipcRenderer.invoke('appsettings:get', appId),
+  setAppSetting: (appId: string, key: string, value: string): Promise<{ ok: true; view: AppSettingsView } | { ok: false; error: string }> => ipcRenderer.invoke('appsettings:set', appId, key, value),
+  setAppSecret: (appId: string, key: string, value: string | null): Promise<{ ok: true; view: AppSettingsView } | { ok: false; error: string }> => ipcRenderer.invoke('appsettings:secret', appId, key, value),
   pickBundle: (): Promise<BundlePick> => ipcRenderer.invoke('bundle:pick'),
   installBundle: (file: string): Promise<{ ok: true; id: string } | { ok: false; errors: string[] }> => ipcRenderer.invoke('bundle:install', file),
   exportApp: (appId: string): Promise<{ exported: true; file: string } | { exported: false; error?: string }> => ipcRenderer.invoke('bundle:export', appId),

@@ -83,14 +83,36 @@ describe('parseManifest', () => {
     expect(errorsOf(m)).toContainEqual(expect.stringMatching(/resident는 앱당 하나/));
   });
 
-  it('schedule은 cron 또는 every 중 하나만', () => {
+  it('schedule은 때를 정하는 방법 중 하나만', () => {
     const m = good();
     const t = (m.triggers as Record<string, unknown>[])[2];
     t.every = 60;
-    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/cron 또는 every 중 하나만/));
+    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/중 하나만/));
     delete t.cron;
     delete t.every;
-    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/cron 또는 every 중 하나만/));
+    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/중 하나만/));
+  });
+
+  it('schedule의 때를 설정으로 정할 수 있다: atSetting(time)·everyMinutesSetting(number)', () => {
+    const m = good();
+    (m.settings as unknown[]).push({ key: 'notify-at', label: '알림 시각', type: 'time', default: '09:00' }, { key: 'poll-min', label: '확인 간격(분)', type: 'number', default: 30 });
+    const t = (m.triggers as Record<string, unknown>[])[2];
+    delete t.cron;
+    t.atSetting = 'notify-at';
+    expect(errorsOf(m)).toEqual([]);
+    delete t.atSetting;
+    t.everyMinutesSetting = 'poll-min';
+    expect(errorsOf(m)).toEqual([]);
+  });
+
+  it('schedule이 가리키는 설정이 없거나 종류가 틀리면 막는다', () => {
+    const m = good();
+    const t = (m.triggers as Record<string, unknown>[])[2];
+    delete t.cron;
+    t.atSetting = 'nope';
+    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/설정 'nope'가 settings에 없음/));
+    (m.settings as unknown[]).push({ key: 'nope', label: 'x', type: 'string' });
+    expect(errorsOf(m)).toContainEqual(expect.stringMatching(/time 종류여야 함/));
   });
 
   it('패키지 밖 경로를 막는다', () => {

@@ -10,12 +10,19 @@ export const MANIFEST_SCHEMA = 1;
 
 export type HotkeyTrigger = { kind: 'hotkey'; script: string; key: string; name: string; description: string };
 export type ResidentTrigger = { kind: 'resident'; script: string; heartbeat: number };
-export type ScheduleTrigger = { kind: 'schedule'; script: string; name: string; cron?: string; every?: number };
+/**
+ * 정해진 때 1회 실행. 때는 넷 중 하나로 정한다:
+ *   cron / every          선언에 박아 둔 때(사용자가 못 바꾼다)
+ *   atSetting             `time` 종류 설정의 키 — 매일 그 시각(사용자가 설정 화면에서 바꾼다)
+ *   everyMinutesSetting   `number` 종류 설정의 키 — 그 분마다(사용자가 바꾼다)
+ */
+export type ScheduleTrigger = { kind: 'schedule'; script: string; name: string; cron?: string; every?: number; atSetting?: string; everyMinutesSetting?: string };
 export type LoginTrigger = { kind: 'login'; script: string; name: string };
 export type EventTrigger = { kind: 'event'; script: string; on: string };
 export type Trigger = HotkeyTrigger | ResidentTrigger | ScheduleTrigger | LoginTrigger | EventTrigger;
 
-export type SettingType = 'string' | 'number' | 'boolean' | 'list' | 'choice';
+/** time: 24시간 "HH:MM" */
+export type SettingType = 'string' | 'number' | 'boolean' | 'list' | 'choice' | 'time';
 export interface SettingDecl {
   key: string;
   label: string;
@@ -114,7 +121,11 @@ const checkTrigger = (errors: string[], i: number, t: unknown, hotkeyKeys: Set<s
       if (!isStr(t.name)) errors.push(`${at}.name: 필수`);
       const hasCron = t.cron !== undefined;
       const hasEvery = t.every !== undefined;
-      if (hasCron === hasEvery) errors.push(`${at}: cron 또는 every 중 하나만`);
+      const hasAt = t.atSetting !== undefined;
+      const hasEveryMin = t.everyMinutesSetting !== undefined;
+      if ([hasCron, hasEvery, hasAt, hasEveryMin].filter(Boolean).length !== 1) errors.push(`${at}: cron·every·atSetting·everyMinutesSetting 중 하나만`);
+      if (hasAt && (!isStr(t.atSetting) || !KEY_RE.test(t.atSetting))) errors.push(`${at}.atSetting: 설정 키`);
+      if (hasEveryMin && (!isStr(t.everyMinutesSetting) || !KEY_RE.test(t.everyMinutesSetting))) errors.push(`${at}.everyMinutesSetting: 설정 키`);
       if (hasCron && (!isStr(t.cron) || !CRON_RE.test(t.cron))) errors.push(`${at}.cron: 5칸`);
       if (hasEvery && !isPosInt(t.every)) errors.push(`${at}.every: 양의 정수(초)`);
       return;
@@ -140,7 +151,7 @@ const checkSettings = (errors: string[], v: unknown): void => {
     else if (keys.has(s.key)) errors.push(`${at}.key: '${s.key}' 중복`);
     else keys.add(s.key);
     if (!isStr(s.label)) errors.push(`${at}.label: 필수`);
-    if (!['string', 'number', 'boolean', 'list', 'choice'].includes(s.type as string)) errors.push(`${at}.type: string|number|boolean|list|choice`);
+    if (!['string', 'number', 'boolean', 'list', 'choice', 'time'].includes(s.type as string)) errors.push(`${at}.type: string|number|boolean|list|choice|time`);
     if (s.type === 'choice' && !isStrArr(s.options)) errors.push(`${at}.options: choice면 필수`);
     if (s.required !== undefined && typeof s.required !== 'boolean') errors.push(`${at}.required: boolean`);
   });
@@ -207,6 +218,20 @@ export const parseManifest = (raw: unknown): ManifestResult => {
 
   checkSettings(errors, m.settings);
   checkSecrets(errors, m.secrets);
+  // 스케줄이 가리키는 설정이 있고 종류가 맞아야 한다
+  if (Array.isArray(m.triggers) && Array.isArray(m.settings)) {
+    const decls = new Map((m.settings as unknown[]).filter(isObj).map((d) => [String(d.key), d]));
+    m.triggers.forEach((t, i) => {
+      if (!isObj(t) || t.kind !== 'schedule') return;
+      for (const [field, want] of [['atSetting', 'time'], ['everyMinutesSetting', 'number']] as const) {
+        const key = t[field];
+        if (key === undefined) continue;
+        const d = decls.get(String(key));
+        if (!d) errors.push(`triggers[${i}].${field}: 설정 '${String(key)}'가 settings에 없음`);
+        else if (d.type !== want) errors.push(`triggers[${i}].${field}: 설정 '${String(key)}'는 ${want} 종류여야 함(지금 ${String(d.type)})`);
+      }
+    });
+  }
 
   if (!Array.isArray(m.references)) errors.push('references: 배열이어야 함');
   else m.references.forEach((r, i) => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ServiceMeta } from '../../shared/types';
 import type { MaintenanceView } from '../../shared/studio';
+import { AppSettings } from './AppSettings';
 
 interface Props {
   service: ServiceMeta;
@@ -82,6 +83,8 @@ export function ServiceDetail({ service, onToggle, onExport }: Props) {
           )}
         </section>
       )}
+
+      <AppSettings appId={service.id} />
 
       <section className="detail-section">
         <h2>이게 뭔가요</h2>

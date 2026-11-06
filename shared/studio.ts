@@ -11,6 +11,8 @@ import type { BundlePreview } from '../modules/bundle/bundle';
 export type { BuildState, ChatEvent, InstallView, CliStatus, EngineChoice, LoginView, Message, ReqStatus, SendResult, ThreadMeta, Vendor, Verdict };
 
 export type { BundlePreview };
+export type { AppSettingsView } from '../modules/platform/platform';
+export type { SettingField } from '../modules/settings/values';
 /** 레시피 만들기 결과(electron/studioHost.ts의 recipe:make). 보내기 전에 사람이 볼 것들을 같이 준다 */
 export type RecipeView =
   | { ok: true; goal: string; text: string; blanks: string[]; references: { text: string; readOnly: boolean }[]; warnings: string[] }

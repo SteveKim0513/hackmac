@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SecretStore, type SecretCrypto } from '../secrets/secrets.ts';
 import { Platform, type HotkeyPort } from './platform.ts';
+
+const fakeCrypto = (available = true): SecretCrypto => ({ available: () => available, encrypt: (x) => Buffer.from(`enc:${x}`), decrypt: (c) => c.toString().slice(4) });
 
 const GTD_SERVICES = join(process.cwd(), 'resources', 'services');
 
@@ -151,5 +154,99 @@ describe('Platform', () => {
     const p2 = platform();
     expect(p2.restore()).toEqual({ enabled: ['jiho.t'], failed: [{ id: 'ghost.app', reason: '설치돼 있지 않거나 현재 버전이 없음' }] });
     expect([...registered.keys()]).toEqual(['Alt+1']);
+  });
+  describe('앱 설정 화면', () => {
+    it('선언한 설정이 칸이 되고, 바꾼 값은 검증돼 저장되며 다음 실행부터 스크립트가 받는다', async () => {
+      const p = platform();
+      p.install(makePkg('a', { settings: [{ key: 'greeting', label: '인사', type: 'string', default: 'hi' }, { key: 'count', label: '횟수', type: 'number', default: 3 }] }));
+      const v0 = p.appSettingsView('jiho.t');
+      expect(v0).toMatchObject({ ok: true, missing: [] });
+      if (!v0.ok) return;
+      expect(v0.fields.map((f) => [f.key, f.value, f.changed])).toEqual([['greeting', 'hi', false], ['count', '3', false]]);
+
+      const bad = await p.setAppSetting('jiho.t', 'count', 'abc');
+      expect(bad).toEqual({ ok: false, error: '횟수: 숫자로 적어 주세요' });
+      expect(await p.setAppSetting('jiho.t', 'nope', 'x')).toMatchObject({ ok: false });
+
+      const r = await p.setAppSetting('jiho.t', 'greeting', 'hello');
+      expect(r.ok && r.view.ok && r.view.fields[0]).toMatchObject({ value: 'hello', changed: true });
+      p.enable('jiho.t');
+      registered.get('Alt+1')!();
+      await until(() => p.ledger.read({ kind: 'run.end' }).length === 1);
+      expect(readFileSync(join(tmp, 'apps', 'jiho.t', 'data', 'ran.txt'), 'utf8')).toContain('ran hello');
+    });
+
+    it('빈 값을 보내면 기본값으로 되돌린다', async () => {
+      const p = platform();
+      p.install(makePkg('a'));
+      await p.setAppSetting('jiho.t', 'greeting', 'yo');
+      const r = await p.setAppSetting('jiho.t', 'greeting', '');
+      expect(r.ok && r.view.ok && r.view.fields[0]).toMatchObject({ value: 'hi', changed: false });
+    });
+
+    it('스케줄 시각을 설정으로 정한다: 바꾸면 켜져 있는 앱이 새 시각으로 다시 붙는다', async () => {
+      const p = platform();
+      p.install(makePkg('a', {
+        settings: [{ key: 'notify-at', label: '알림 시각', type: 'time', default: '16:00' }],
+        triggers: [{ kind: 'schedule', script: 'scripts/a.sh', name: '알림', atSetting: 'notify-at' }],
+      }));
+      expect(p.enable('jiho.t')).toEqual({ ok: true, problems: [] });
+      p.tick(new Date('2026-11-06T16:00:10')); // 기본 16:00에 한 번
+      await until(() => p.ledger.read({ kind: 'run.end' }).length === 1);
+
+      const bad = await p.setAppSetting('jiho.t', 'notify-at', '25:00');
+      expect(bad.ok).toBe(false);
+      const r = await p.setAppSetting('jiho.t', 'notify-at', '17:30');
+      expect(r.ok).toBe(true);
+      expect(p.isEnabled('jiho.t')).toBe(true);
+      p.tick(new Date('2026-11-06T16:00:10')); // 예전 시각엔 안 돈다
+      p.tick(new Date('2026-11-06T17:30:05'));
+      await until(() => p.ledger.read({ kind: 'run.end' }).length === 2);
+      await new Promise((x) => setTimeout(x, 100));
+      expect(p.ledger.read({ kind: 'run.start' })).toHaveLength(2);
+    });
+
+    it('간격을 설정(분)으로 정한다', () => {
+      const p = platform();
+      p.install(makePkg('a', {
+        settings: [{ key: 'poll', label: '확인 간격(분)', type: 'number', default: 0 }],
+        triggers: [{ kind: 'schedule', script: 'scripts/a.sh', name: '확인', everyMinutesSetting: 'poll' }],
+      }));
+      const e = p.enable('jiho.t');
+      expect(e).toMatchObject({ ok: true });
+      expect(e.ok && e.problems[0]).toMatch(/1분 이상/);
+    });
+
+    it('비밀값: 값은 화면에 돌려주지 않고 스크립트 env로만 간다. 필수인데 없으면 켜지지 않는다', async () => {
+      const secrets = new SecretStore(join(tmp, 'secrets.json'), fakeCrypto());
+      const p = platform({ secrets });
+      const dir = makePkg('a', { secrets: [{ key: 'api-key', label: 'API 키', required: true }] });
+      writeFileSync(join(dir, 'scripts', 'a.sh'), '#!/bin/zsh\necho "key=$HACKMAC_SECRET_API_KEY" > "$HACKMAC_DATA_DIR/ran.txt"\n');
+      p.install(dir);
+      expect(p.enable('jiho.t')).toEqual({ ok: false, reason: '설정 필요: API 키' });
+      const before = p.appSettingsView('jiho.t');
+      expect(before.ok && before.missing).toEqual(['API 키']);
+
+      const r = await p.setAppSecret('jiho.t', 'api-key', 'sk-TOP-SECRET');
+      expect(r.ok && r.view.ok && r.view.secrets[0]).toEqual({ key: 'api-key', label: 'API 키', required: true, isSet: true });
+      expect(JSON.stringify(r)).not.toContain('TOP-SECRET');
+      expect(JSON.stringify(p.ledger.read())).not.toContain('TOP-SECRET');
+      expect(JSON.stringify(p.settings.get())).not.toContain('TOP-SECRET');
+
+      expect(p.enable('jiho.t').ok).toBe(true);
+      registered.get('Alt+1')!();
+      await until(() => p.ledger.read({ kind: 'run.end' }).length === 1);
+      expect(readFileSync(join(tmp, 'apps', 'jiho.t', 'data', 'ran.txt'), 'utf8')).toContain('key=sk-TOP-SECRET');
+
+      await p.setAppSecret('jiho.t', 'api-key', null);
+      const after = p.appSettingsView('jiho.t');
+      expect(after.ok && after.secrets[0]!.isSet).toBe(false);
+    });
+
+    it('비밀값 보관소를 쓸 수 없으면 저장을 거절한다', async () => {
+      const p = platform({ secrets: new SecretStore(join(tmp, 'secrets.json'), fakeCrypto(false)) });
+      p.install(makePkg('a', { secrets: [{ key: 'api-key', label: 'API 키' }] }));
+      expect((await p.setAppSecret('jiho.t', 'api-key', 'x')).ok).toBe(false);
+    });
   });
 });

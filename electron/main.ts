@@ -291,6 +291,19 @@ ipcMain.handle('services:activate', (_e, id: string) => activateService(requireP
 
 ipcMain.handle('services:deactivate', (_e, id: string) => requirePlatform().disable(id));
 
+// 앱 상세의 설정 화면: 선언한 settings·secrets를 읽고 바꾼다. 비밀값은 저장만 되고 값을 돌려주지 않는다
+ipcMain.handle('appsettings:get', (_e, appId: string) => requirePlatform().appSettingsView(String(appId)));
+ipcMain.handle('appsettings:set', async (_e, appId: string, key: string, value: string) => {
+  const r = await requirePlatform().setAppSetting(String(appId), String(key), String(value ?? ''));
+  appLog.info('platform', `설정 변경: ${String(appId)} ${String(key)} → ${r.ok ? '저장' : r.error}`);
+  return r;
+});
+ipcMain.handle('appsettings:secret', async (_e, appId: string, key: string, value: string | null) => {
+  const r = await requirePlatform().setAppSecret(String(appId), String(key), value === null ? null : String(value));
+  appLog.info('platform', `비밀값 변경: ${String(appId)} ${String(key)} → ${r.ok ? (value ? '저장' : '지움') : r.error}`);
+  return r;
+});
+
 // 꾸러미(.hackapp): 내보내기·설치하기. 파일 선택 창은 OS 기본(우리가 그릴 수 없다), 확인은 화면의 미리 보기 창에서 한다.
 // HACKMAC_E2E_PICK_FILE / HACKMAC_E2E_SAVE_DIR은 E2E 전용 — 자동화로는 OS 파일 창을 못 누르므로 경로를 직접 넘긴다.
 ipcMain.handle('bundle:pick', async (e) => {

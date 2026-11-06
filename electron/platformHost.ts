@@ -5,13 +5,14 @@
  *
  * 렌더러 계약은 아직 v1(ServiceMeta)이다 — 화면을 새로 그리기 전까지 AppView를 ServiceMeta로 바꿔 준다.
  */
-import { app, globalShortcut, Notification } from 'electron';
+import { app, globalShortcut, Notification, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Trigger } from '../shared/manifest';
 import type { ActivateResult, ServiceMeta, ThemePreference } from '../shared/types';
 import { ensureDirs, Platform, type AppView, type HotkeyPort } from '../modules/platform/platform';
 import type { RunResult } from '../modules/runner/runner';
+import { SecretStore } from '../modules/secrets/secrets';
 import { cleanupOldLogs } from './exec-log';
 import { appLog, describeError, serviceTag } from './log';
 import { popupClientJsPath, popupSocketPath, popupWrapperPath, servicesDir } from './paths';
@@ -75,8 +76,16 @@ export function createPlatform(): Platform {
   ensureDirs(paths);
   migrateV1Settings(paths.settings);
 
+  // 비밀값은 키체인이 쥔 키로 암호화해서 둔다(safeStorage). 쓸 수 없으면 저장을 거절한다
+  const secrets = new SecretStore(path.join(userData, 'secrets.json'), {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plain) => safeStorage.encryptString(plain),
+    decrypt: (cipher) => safeStorage.decryptString(cipher),
+  });
+
   const platform = new Platform({
     paths,
+    secrets,
     capabilities: CAPABILITIES,
     capabilityEnv: () => ({
       HACKMAC_POPUP: popupWrapperPath(),

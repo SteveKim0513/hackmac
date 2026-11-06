@@ -16,6 +16,8 @@ import { Ledger } from '../ledger/ledger.ts';
 import { cronMatches, parseCron, type Cron } from '../runner/cron.ts';
 import { Runner, type RunContext, type RunnerEvent, type RunResult } from '../runner/runner.ts';
 import { Settings } from '../settings/settings.ts';
+import { cronAt, effectiveValue, normalizeValue, toField, type SettingField } from '../settings/values.ts';
+import type { SecretStore } from '../secrets/secrets.ts';
 import { writeV2Package } from '../store/fromV1.ts';
 import { readPackage, Store, type InstalledApp } from '../store/store.ts';
 
@@ -38,6 +40,8 @@ export interface PlatformOptions {
     onHotkeyRunStart?: (appId: string, trigger: Extract<Trigger, { kind: 'hotkey' }>) => void;
     onHotkeyRunEnd?: (appId: string, trigger: Extract<Trigger, { kind: 'hotkey' }>, result: RunResult) => void;
   };
+  /** 비밀값 보관(암호화). 없으면 비밀값을 못 저장한다 */
+  secrets?: SecretStore;
   now?: () => Date;
   /** 시험용 실행기 옵션 */
   runner?: Partial<ConstructorParameters<typeof Runner>[0]>;
@@ -54,6 +58,11 @@ export interface AppView {
   manifest: AppManifest | null;
   hotkeys: { key: string; name: string; slot: string | null }[];
 }
+
+/** 앱 상세의 설정 화면이 그리는 것. 선언한 settings·secrets가 그대로 입력칸이 된다 */
+export type AppSettingsView =
+  | { ok: true; fields: SettingField[]; secrets: { key: string; label: string; required: boolean; isSet: boolean }[]; missing: string[] }
+  | { ok: false; error: string };
 
 export type EnableResult = { ok: true; problems: string[] } | { ok: false; reason: string };
 
@@ -237,14 +246,75 @@ export class Platform {
   }
 
   private context(appId: string, manifest: AppManifest): RunContext {
-    const s = this.settings.get();
-    const values = s.appSettings[appId] ?? {};
+    const stored = this.settings.get().appSettings[appId];
     const settings: Record<string, string> = {};
     for (const d of manifest.settings) {
-      const v = values[d.key] ?? (d.default !== undefined ? (typeof d.default === 'string' ? d.default : JSON.stringify(d.default)) : undefined);
+      const v = effectiveValue(d, stored);
       if (v !== undefined) settings[d.key] = v;
     }
-    return { appId, appDir: this.store.currentDir(appId)!, dataDir: this.store.dataDir(appId), settings, secrets: {}, env: this.o.capabilityEnv() };
+    // 선언한 비밀값만 스크립트에 준다
+    const all = this.o.secrets?.values(appId) ?? {};
+    const secrets = Object.fromEntries(manifest.secrets.filter((d) => all[d.key] !== undefined).map((d) => [d.key, all[d.key]!]));
+    return { appId, appDir: this.store.currentDir(appId)!, dataDir: this.store.dataDir(appId), settings, secrets, env: this.o.capabilityEnv() };
+  }
+
+  /** 설정 화면용: 지금 값·기본값·바꿨는지, 비밀값은 들어 있는지만(값은 돌려주지 않는다) */
+  appSettingsView(appId: string): AppSettingsView {
+    const dir = this.store.currentDir(appId);
+    const read = dir ? readPackage(dir) : null;
+    if (!read) return { ok: false, error: '설치돼 있지 않거나 현재 버전이 없어요' };
+    if (!read.ok) return { ok: false, error: read.errors.join('; ') };
+    const m = read.manifest;
+    const stored = this.settings.get().appSettings[appId];
+    const fields = m.settings.map((d) => toField(d, stored));
+    const secrets = m.secrets.map((d) => ({ key: d.key, label: d.label, required: d.required === true, isSet: this.o.secrets?.has(appId, d.key) ?? false }));
+    const missing = [...fields.filter((f) => f.required && f.value === '').map((f) => f.label), ...secrets.filter((x) => x.required && !x.isSet).map((x) => x.label)];
+    return { ok: true, fields, secrets, missing };
+  }
+
+  /** 설정 하나를 바꾼다. 빈 값은 "기본값으로 되돌리기". 켜져 있고 상주·스케줄이 있는 앱은 새 값으로 다시 붙인다 */
+  async setAppSetting(appId: string, key: string, raw: string): Promise<{ ok: true; view: AppSettingsView } | { ok: false; error: string }> {
+    const dir = this.store.currentDir(appId);
+    const read = dir ? readPackage(dir) : null;
+    if (!read?.ok) return { ok: false, error: '설치돼 있지 않거나 선언을 읽을 수 없어요' };
+    const decl = read.manifest.settings.find((d) => d.key === key);
+    if (!decl) return { ok: false, error: `이 앱에 '${key}' 설정이 없어요` };
+    const cur = { ...(this.settings.get().appSettings[appId] ?? {}) };
+    if (raw.trim() === '') delete cur[key];
+    else {
+      const n = normalizeValue(decl, raw);
+      if (!n.ok) return { ok: false, error: n.error };
+      cur[key] = n.value;
+    }
+    this.settings.update({ appSettings: { ...this.settings.get().appSettings, [appId]: cur } });
+    this.ledger.append({ kind: 'app.setting.changed', appId, key });
+    await this.reapply(appId);
+    return { ok: true, view: this.appSettingsView(appId) };
+  }
+
+  /** 비밀값 저장(value) 또는 지우기(null). 값은 원장·로그에 남기지 않는다 */
+  async setAppSecret(appId: string, key: string, value: string | null): Promise<{ ok: true; view: AppSettingsView } | { ok: false; error: string }> {
+    const dir = this.store.currentDir(appId);
+    const read = dir ? readPackage(dir) : null;
+    if (!read?.ok) return { ok: false, error: '설치돼 있지 않거나 선언을 읽을 수 없어요' };
+    if (!read.manifest.secrets.some((d) => d.key === key)) return { ok: false, error: `이 앱에 '${key}' 비밀값이 없어요` };
+    if (!this.o.secrets) return { ok: false, error: '비밀값 보관소가 없어요' };
+    if (value === null || value === '') this.o.secrets.clear(appId, key);
+    else {
+      const r = this.o.secrets.set(appId, key, value);
+      if (!r.ok) return r;
+    }
+    this.ledger.append({ kind: 'app.secret.changed', appId, key, cleared: value === null || value === '' });
+    await this.reapply(appId);
+    return { ok: true, view: this.appSettingsView(appId) };
+  }
+
+  /** 켜져 있는 앱이 상주·스케줄을 가졌으면 새 설정으로 다시 붙인다(1회 실행은 실행 때마다 새 값을 읽으니 그대로 둔다) */
+  private async reapply(appId: string): Promise<void> {
+    const l = this.live.get(appId);
+    if (!l || !l.manifest.triggers.some((t) => t.kind === 'resident' || t.kind === 'schedule')) return;
+    await this.disable(appId);
+    this.enable(appId);
   }
 
   async runTrigger(appId: string, trigger: Trigger): Promise<RunResult | null> {
@@ -261,8 +331,11 @@ export class Platform {
     if (!read.ok) return { ok: false, reason: read.errors.join('; ') };
     const m = read.manifest;
     const s = this.settings.get();
-    const required = m.settings.filter((d) => d.required && d.default === undefined && !(s.appSettings[appId]?.[d.key]));
-    if (required.length) return { ok: false, reason: `설정 필요: ${required.map((d) => d.label).join(', ')}` };
+    const required = [
+      ...m.settings.filter((d) => d.required && effectiveValue(d, s.appSettings[appId]) === undefined).map((d) => d.label),
+      ...m.secrets.filter((d) => d.required && !(this.o.secrets?.has(appId, d.key) ?? false)).map((d) => d.label),
+    ];
+    if (required.length) return { ok: false, reason: `설정 필요: ${required.join(', ')}` };
 
     const hotkeyTriggers = m.triggers.filter((t): t is Extract<Trigger, { kind: 'hotkey' }> => t.kind === 'hotkey');
     const assigned = assign(s.hotkeys, appId, hotkeyTriggers.map((t) => t.key), s.hotkeysPrevious);
@@ -292,9 +365,24 @@ export class Platform {
     const schedules: Live['schedules'] = [];
     for (const t of m.triggers) {
       if (t.kind !== 'schedule') continue;
-      const cron = t.cron ? parseCron(t.cron) : null;
-      if (t.cron && !cron) { problems.push(`${t.name}: cron '${t.cron}'을 읽을 수 없음`); continue; }
-      schedules.push({ cron, everySec: t.every ?? null, trigger: t, lastRun: 0 });
+      // 때는 선언에 박힌 값이거나, 사용자가 설정 화면에서 정한 값이다
+      const decls = new Map(m.settings.map((d) => [d.key, d]));
+      const stored = s.appSettings[appId];
+      let cronText = t.cron ?? null;
+      let everySec = t.every ?? null;
+      if (t.atSetting) {
+        const v = effectiveValue(decls.get(t.atSetting)!, stored);
+        cronText = v ? cronAt(v) : null;
+        if (!cronText) { problems.push(`${t.name}: 시각 설정 '${t.atSetting}'을(를) 읽을 수 없음`); continue; }
+      }
+      if (t.everyMinutesSetting) {
+        const v = Number(effectiveValue(decls.get(t.everyMinutesSetting)!, stored));
+        if (!Number.isFinite(v) || v < 1) { problems.push(`${t.name}: 간격 설정 '${t.everyMinutesSetting}'은 1분 이상이어야 함`); continue; }
+        everySec = Math.round(v * 60);
+      }
+      const cron = cronText ? parseCron(cronText) : null;
+      if (cronText && !cron) { problems.push(`${t.name}: cron '${cronText}'을 읽을 수 없음`); continue; }
+      schedules.push({ cron, everySec, trigger: t, lastRun: 0 });
     }
     for (const t of m.triggers) if (t.kind === 'login') void this.runner.runOnce(ctx(), t);
 
