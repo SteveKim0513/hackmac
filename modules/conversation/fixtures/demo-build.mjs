@@ -1,6 +1,6 @@
 // 가짜 엔진들이 쓰는 시험용 행동: 진짜 제작 에이전트가 하는 것과 같은 순서로 $HACKMAC_BUILD를 부르고 ./app을 만든다.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** 가능성 평가 담당으로 불렸으면 판정 JSON을 돌려준다(modules/build/evaluate.ts의 출력 모양) */
@@ -35,4 +35,23 @@ export const demoBuild = (cwd) => {
   const verify = build('verify');
   const submit = build('submit');
   return [`평가: ${ev.split('\n')[0]}`, `검증: ${verify.split('\n')[0]}`, submit.split('\n')[0]].join('\n');
+};
+
+/** 유지보수 팀으로 불렸으면 고치는 행동을 한다(modules/maintain/team.ts의 프롬프트). 아니면 null */
+export const fixReply = (text, cwd = process.cwd()) => {
+  if (!text.includes('유지보수 팀이다')) return null;
+  if (!process.env.HACKMAC_BUILD) return 'HACKMAC_BUILD가 없음';
+  const incident = readFileSync(join(cwd, 'context', 'incident.md'), 'utf8');
+  if (incident.includes('UNFIXABLE')) return '고칠 수 없음: 외부 원인이라 앱을 고쳐도 낫지 않아요.';
+  const app = join(cwd, 'app');
+  const m = JSON.parse(readFileSync(join(app, 'manifest.json'), 'utf8'));
+  m.version = String(Number(m.version) + 1);
+  writeFileSync(join(app, 'manifest.json'), JSON.stringify(m));
+  writeFileSync(join(app, 'scripts', 'x.sh'), '#!/bin/zsh\necho "판단: 고친 스크립트"\nexit 0\n');
+  mkdirSync(join(app, 'checks'), { recursive: true });
+  writeFileSync(join(app, 'checks', 'R1-fixed.sh'), '#!/bin/zsh\nzsh "$HACKMAC_APP_DIR/scripts/x.sh" | grep -q "고친 스크립트"\n');
+  if (incident.includes('BADFIX')) writeFileSync(join(app, 'scripts', 'bad.sh'), '#!/bin/zsh\nbrew install jq\n');
+  const verify = build('verify');
+  const submit = build('submit');
+  return submit.startsWith('수정본을 검증했고') ? '명령이 없어서 멈추던 부분을 고쳤고, 그 경우를 시험으로 확인했어요.' : `제출 실패: ${verify.split('\n')[0]}`;
 };

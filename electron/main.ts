@@ -9,6 +9,7 @@ import { checkForUpdatesManually, initAutoUpdate } from './updater';
 import { appLog, describeError } from './log';
 import { startPopupServer, stopPopupServer } from './popupServer';
 import { activateService, createPlatform, listServices, themeOf } from './platformHost';
+import { startMaintain } from './maintainHost';
 import { startStudio } from './studioHost';
 import type { Platform } from '../modules/platform/platform';
 import { readPackage } from '../modules/store/store';
@@ -64,6 +65,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let platform: Platform | null = null;
 let studio: { stop: () => Promise<void> } | null = null;
+let maintain: { stop: () => void } | null = null;
 
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -150,7 +152,9 @@ app.whenReady().then(() => {
 
   // 보관소·설정·원장을 먼저 세워야 테마(설정)와 단축키 복원이 가능하다.
   platform = createPlatform();
-  studio = startStudio(platform);
+  const started = startStudio(platform);
+  studio = started;
+  maintain = startMaintain(platform, started.services);
 
   // 창을 만들기 전에 먼저 적용해야 위 backgroundColor 계산과 트래픽라이트
   // 등 네이티브 크롬이 처음부터 올바른 밝기로 뜬다.
@@ -254,6 +258,9 @@ app.on('before-quit', (e) => {
   appLog.info('main', '앱 종료 — 실행기 정리 중');
   const p = platform;
   const s = studio;
+  // 끄는 중에 죽는 앱을 실패로 세지 않게 감시자를 먼저 멈춘다
+  maintain?.stop();
+  maintain = null;
   platform = null;
   studio = null;
   const done = () => {

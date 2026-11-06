@@ -56,6 +56,11 @@ export class Chats {
 
   constructor(private readonly d: ChatDeps) {}
 
+  /** 어느 스레드든 엔진이 일하는 중인가(유지보수 팀 호출을 미루는 데 쓴다) */
+  anyBusy(): boolean {
+    return [...this.live.values()].some((c) => c.busy);
+  }
+
   busy(threadId: string): boolean {
     return this.live.get(threadId)?.busy ?? false;
   }

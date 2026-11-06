@@ -27,7 +27,7 @@ export interface AppHandle {
 /** 가짜 CLI 상태. in: 설치+로그인, out: 설치만, none: 설치 안 됨, installable: 설치 안 됨이지만 "설치하기"를 누르면 로그아웃 상태로 깔린다 */
 export type FakeCli = 'in' | 'out' | 'none' | 'installable';
 /** real: 가짜 CLI 대신 이 Mac에 깔린 진짜 claude/codex를 쓴다(구독 사용량을 쓴다) */
-export interface LaunchOptions { claude?: FakeCli; codex?: FakeCli; real?: boolean; /** 앱 프로세스에 더 줄 환경변수(E2E 전용 훅 등) */ env?: Record<string, string> }
+export interface LaunchOptions { claude?: FakeCli; codex?: FakeCli; real?: boolean; /** 앱 프로세스에 더 줄 환경변수(E2E 전용 훅 등) */ env?: Record<string, string>; /** 앱을 띄우기 전에 userData에 미리 심을 것(설치된 앱·대기 중인 수정본 등) */ seed?: (userData: string) => void }
 
 /**
  * 실제 claude/codex 대신 modules/conversation/fixtures의 가짜 CLI를 쓰게 한다 — 사람의 구독을 쓰지 않고,
@@ -60,6 +60,7 @@ function fakeCliDir(o: LaunchOptions): { dir: string; env: Record<string, string
 export async function launchApp(options: LaunchOptions = {}): Promise<AppHandle> {
   const userData = mkdtempSync(join(tmpdir(), 'hackmac-userData-'));
   const { dir: cliDir, env: cliEnv } = fakeCliDir(options);
+  options.seed?.(userData);
 
   const env: Record<string, string> = { ...(process.env as Record<string, string>) };
   // VS Code 등 개발 셸이 기본으로 걸어두는 값 — 켜져 있으면 Electron이 창을

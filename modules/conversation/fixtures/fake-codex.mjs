@@ -4,7 +4,7 @@
 //   "slow": turn/interrupt가 올 때까지 기다렸다가 interrupted로 끝낸다
 //   "die": 코드 3으로 끝난다
 import { createInterface } from 'node:readline';
-import { demoBuild, evaluatorReply } from './demo-build.mjs';
+import { demoBuild, evaluatorReply, fixReply } from './demo-build.mjs';
 
 if (process.argv[2] === '--version') { console.log('codex-cli 9.9.9'); process.exit(0); }
 
@@ -40,7 +40,7 @@ const runTurn = async (turnId, text) => {
   note('turn/started', { threadId: thread, turn: { id: turnId, items: [], status: 'inProgress' } });
   if (text === 'die') { process.stderr.write('죽음\n'); process.exit(3); }
   if (text === 'slow') { slow = turnId; return; }
-  let answer = evaluatorReply(text) ?? (text === 'build-demo' ? demoBuild(process.cwd()) : `echo:${text}`);
+  let answer = evaluatorReply(text) ?? fixReply(text) ?? (text === 'build-demo' ? demoBuild(process.cwd()) : `echo:${text}`);
   if (text === 'approve') {
     const decision = await new Promise((resolve) => { waitingServer.set('srv-1', resolve); out({ id: 'srv-1', method: 'item/commandExecution/requestApproval', params: { threadId: thread, turnId, itemId: 'cmd1', command: 'rm -rf /' } }); });
     answer = `decision:${decision.decision}`;

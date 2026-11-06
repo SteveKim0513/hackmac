@@ -14,8 +14,8 @@ describe('normalize', () => {
     expect(normalize(null)).toEqual(DEFAULT_SETTINGS);
   });
   it('칸마다 따져 읽고 모르는 칸과 깨진 값은 버린다', () => {
-    expect(normalize({ enabled: ['a.x', 3], hotkeys: { 'a.x/k': 'Alt+1', bad: 1 }, appSettings: { 'a.x': { n: '1', m: 2 } }, theme: 'neon', engine: 'codex', extra: true })).toEqual({
-      schema: 1, enabled: ['a.x'], hotkeys: { 'a.x/k': 'Alt+1' }, hotkeysPrevious: {}, appSettings: { 'a.x': { n: '1' } }, theme: 'system', engine: 'codex',
+    expect(normalize({ enabled: ['a.x', 3], hotkeys: { 'a.x/k': 'Alt+1', bad: 1 }, appSettings: { 'a.x': { n: '1', m: 2 } }, theme: 'neon', engine: 'codex', autoApplyFixes: 'yes', extra: true })).toEqual({
+      schema: 1, enabled: ['a.x'], hotkeys: { 'a.x/k': 'Alt+1' }, hotkeysPrevious: {}, appSettings: { 'a.x': { n: '1' } }, theme: 'system', engine: 'codex', autoApplyFixes: false,
     });
   });
 });

@@ -1,10 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { BundlePick } from '../shared/studio';
+import type { BundlePick, MaintenanceView } from '../shared/studio';
 import type { ActivateResult, PopupRequest, PopupResult, ServiceMeta, ThemePreference, UpdateCheckResult } from '../shared/types';
 import type { AccountsView, BuildState, ChatEvent, InstallView, LoginView, SendResult, ThreadMeta, ThreadView, Vendor } from '../shared/studio';
 
 const api = {
   listServices: (): Promise<ServiceMeta[]> => ipcRenderer.invoke('services:list'),
+  /** 앱 상세의 유지보수: 대기 중인 수정본·기록·자동 적용 */
+  maintenance: (appId: string): Promise<MaintenanceView> => ipcRenderer.invoke('maintenance:get', appId),
+  applyFix: (fixId: string): Promise<{ ok: true; version: number } | { ok: false; error: string }> => ipcRenderer.invoke('maintenance:apply', fixId),
+  dismissFix: (fixId: string): Promise<boolean> => ipcRenderer.invoke('maintenance:dismiss', fixId),
+  setAutoApply: (on: boolean): Promise<boolean> => ipcRenderer.invoke('maintenance:setAuto', on),
   pickBundle: (): Promise<BundlePick> => ipcRenderer.invoke('bundle:pick'),
   installBundle: (file: string): Promise<{ ok: true; id: string } | { ok: false; errors: string[] }> => ipcRenderer.invoke('bundle:install', file),
   exportApp: (appId: string): Promise<{ exported: true; file: string } | { exported: false; error?: string }> => ipcRenderer.invoke('bundle:export', appId),

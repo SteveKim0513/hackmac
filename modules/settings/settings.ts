@@ -18,9 +18,11 @@ export interface SettingsData {
   appSettings: Record<string, Record<string, string>>;
   theme: 'light' | 'dark' | 'system';
   engine: 'claude' | 'codex' | null;
+  /** 유지보수 팀이 고친 수정본을 확인 없이 바로 적용한다(계획서 11.3). 켜도 적용 뒤 알림은 간다. 기본 꺼짐 */
+  autoApplyFixes: boolean;
 }
 
-export const DEFAULT_SETTINGS: SettingsData = { schema: 1, enabled: [], hotkeys: {}, hotkeysPrevious: {}, appSettings: {}, theme: 'system', engine: null };
+export const DEFAULT_SETTINGS: SettingsData = { schema: 1, enabled: [], hotkeys: {}, hotkeysPrevious: {}, appSettings: {}, theme: 'system', engine: null, autoApplyFixes: false };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const strMap = (v: unknown): Record<string, string> =>
@@ -37,6 +39,7 @@ export const normalize = (raw: unknown): SettingsData => {
     appSettings: isObj(raw.appSettings) ? Object.fromEntries(Object.entries(raw.appSettings).map(([id, v]) => [id, strMap(v)])) : {},
     theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : 'system',
     engine: raw.engine === 'claude' || raw.engine === 'codex' ? raw.engine : null,
+    autoApplyFixes: raw.autoApplyFixes === true,
   };
 };
 

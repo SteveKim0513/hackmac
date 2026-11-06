@@ -12,6 +12,11 @@ import { BuildInbox, type InboxRequest, type InboxResponse } from './inbox.ts';
 import { ProgressLog, STEPS, validateAgentEvent, type BuildState, type SystemEvent } from './progress.ts';
 
 export interface BuilderDeps {
+  /**
+   * build(기본): 요구사항 → 평가 → 개발 → 검증 → 설치. fix(유지보수 팀, 계획서 11.3): 이미 있는 앱을 고친다 — 요구사항·평가는 건너뛰지만
+   * 검증 게이트는 그대로 통과해야 하고(고친 곳을 보이는 시험이 하나는 있어야 한다), "설치"는 호출자가 정한 곳(보관 대기)에 한다.
+   */
+  mode?: 'build' | 'fix';
   workDir: string;
   progressFile: string;
   gate: Omit<GateOptions, 'requirements' | 'installedVersion'>;
@@ -86,7 +91,7 @@ export class Builder {
     } catch {
       // 선언이 없거나 깨졌으면 게이트가 알려 준다
     }
-    const report = await runGate(this.pkgDir, { ...this.d.gate, requirements: s.requirements.map((r) => ({ id: r.id, manual: r.manual !== null })), installedVersion: installed });
+    const report = await runGate(this.pkgDir, { ...this.d.gate, requirements: (this.d.mode === 'fix' ? [] : s.requirements).map((r) => ({ id: r.id, manual: r.manual !== null })), installedVersion: installed });
     this.record({ type: 'gate', ok: report.ok, requirements: report.requirements, summary: formatReport(report) });
     return report;
   }
@@ -98,14 +103,16 @@ export class Builder {
 
   private async submit(): Promise<InboxResponse> {
     const s = this.state();
-    if (s.requirements.length === 0) return { ok: false, text: '요구사항이 없음 — req로 먼저 기록한다' };
-    if (!s.verdict) return { ok: false, text: '가능성 평가를 먼저 한다(evaluate)' };
-    if (s.verdict.kind === 'impossible') return { ok: false, text: '평가가 불가능으로 나왔다. 요구사항을 고쳐 다시 evaluate 하거나, 사용자에게 불가능을 알린다' };
+    const fix = this.d.mode === 'fix';
+    if (!fix && s.requirements.length === 0) return { ok: false, text: '요구사항이 없음 — req로 먼저 기록한다' };
+    if (!fix && !s.verdict) return { ok: false, text: '가능성 평가를 먼저 한다(evaluate)' };
+    if (!fix && s.verdict?.kind === 'impossible') return { ok: false, text: '평가가 불가능으로 나왔다. 요구사항을 고쳐 다시 evaluate 하거나, 사용자에게 불가능을 알린다' };
     const report = await this.gate();
     if (!report.ok) return { ok: false, text: `설치하지 않음 — 검증을 통과해야 한다\n${formatReport(report)}` };
     const r = this.d.install(this.pkgDir);
     if (!r.ok) return { ok: false, text: `설치하지 못함: ${r.errors.join('; ')}` };
     this.record({ type: 'installed', appId: r.id, version: r.version });
+    if (fix) return { ok: true, text: `수정본을 검증했고 보관했다(${r.id}). 사용자가 확인하면 적용된다. 여기서 끝낸다 — 더 하지 말고 무엇을 고쳤는지 두세 문장으로 답한다.`, data: r };
     const manual = s.requirements.filter((x) => x.manual);
     return {
       ok: true,

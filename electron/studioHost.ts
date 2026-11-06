@@ -49,7 +49,22 @@ const broadcast = (channel: string, payload: unknown): void => {
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload);
 };
 
-export function startStudio(platform: Platform): { stop: () => Promise<void> } {
+/** 유지보수 팀(electron/maintainHost.ts)이 작업실에서 빌려 쓰는 것 */
+export interface StudioServices {
+  /** 지금 쓰는 엔진 + 그 계정으로 CLI를 부를 실행 정보. 없으면 null(로그인 필요) */
+  pickEngine: () => { vendor: Vendor; bin: string; env: Record<string, string> } | null;
+  /** 사용자가 작업실에서 엔진을 쓰는 중인가 */
+  userBusy: () => boolean;
+  agentPaths: AgentPaths;
+  capabilitiesText: string;
+  docs: ReturnType<typeof agentDocs>;
+  /** 그 앱의 스레드에 알림 글을 남긴다(스레드가 없으면 false) */
+  noticeForApp: (appId: string, text: string) => boolean;
+  /** 그 앱의 스레드 최근 대화(유지보수 팀이 "무엇을 하려던 앱인지" 읽는다) */
+  memoryOfApp: (appId: string) => string;
+}
+
+export function startStudio(platform: Platform): { stop: () => Promise<void>; services: StudioServices } {
   const threads = new ThreadStore(path.join(app.getPath('userData'), 'threads'));
   const logins = createLogins({ spawn, bin: binFor, log: fileLogger(path.join(app.getPath('logs'), 'accounts')) });
   const accounts = new AccountStore(path.join(app.getPath('userData'), 'accounts.json'), path.join(app.getPath('userData'), 'accounts'));
@@ -287,10 +302,39 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
 
   void view(true).catch((err) => appLog.error('studio', `엔진 감지 실패: ${describeError(err)}`));
 
+  const threadOf = (appId: string) => threads.list().find((t) => t.appId === appId) ?? null;
+  const services: StudioServices = {
+    pickEngine: () => {
+      const vendor = platform.settings.get().engine;
+      const order = vendor ? [vendor, ...VENDORS.filter((v) => v !== vendor)] : [...VENDORS];
+      for (const v of order) {
+        const e = engineFor(v, accounts.activeId(v));
+        if (e) return { vendor: v, ...e };
+      }
+      return null;
+    },
+    userBusy: () => chats.anyBusy(),
+    agentPaths,
+    capabilitiesText,
+    docs,
+    noticeForApp: (appId, text) => {
+      const t = threadOf(appId);
+      if (!t) return false;
+      const message = threads.append(t.id, { role: 'notice', text });
+      broadcast('chat:event', { threadId: t.id, event: { kind: 'message', message } });
+      return true;
+    },
+    memoryOfApp: (appId) => {
+      const t = threadOf(appId);
+      return t ? threads.messages(t.id).filter((m) => m.role !== 'notice').slice(-12).map((m) => `${m.role === 'user' ? '사용자' : '도우미'}: ${m.text}`).join('\n\n') : '(이 앱은 작업실에서 만들지 않았어요)';
+    },
+  };
+
   return {
     stop: async () => {
       for (const b of builders.values()) b.stop();
       await chats.stopAll();
     },
+    services,
   };
 }

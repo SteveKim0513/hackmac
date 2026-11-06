@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useState } from 'react';
 import type { ServiceMeta } from '../../shared/types';
+import type { MaintenanceView } from '../../shared/studio';
 
 interface Props {
   service: ServiceMeta;
@@ -8,6 +10,18 @@ interface Props {
 }
 
 export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
+  const [maint, setMaint] = useState<MaintenanceView | null>(null);
+  const [maintMsg, setMaintMsg] = useState<string | null>(null);
+  const refresh = useCallback(() => void window.playbook.maintenance(service.id).then(setMaint), [service.id]);
+  useEffect(refresh, [refresh]);
+
+  const apply = async (id: string) => {
+    setMaintMsg('적용하는 중…');
+    const r = await window.playbook.applyFix(id);
+    setMaintMsg(r.ok ? '고친 버전을 적용했어요.' : `적용하지 못했어요: ${r.error}`);
+    refresh();
+  };
+
   return (
     <div className="detail-page" style={{ ['--accent' as string]: service.accentColor }}>
       <button className="back-button" onClick={onBack}>
@@ -38,6 +52,41 @@ export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
           </button>
         </div>
       </header>
+
+      {maint && (maint.pending.length > 0 || maint.history.length > 0 || maintMsg) && (
+        <section className="detail-section maint-section" data-maintenance>
+          <h2>유지보수</h2>
+          {maintMsg && <p className="maint-msg">{maintMsg}</p>}
+          {maint.pending.map((f) => (
+            <div key={f.id} className="build-box is-ask" data-fix={f.id}>
+              <strong>문제를 고친 버전이 있어요</strong>
+              <p>{f.problem}</p>
+              <p>고친 것: {f.summary}</p>
+              <div className="maint-actions">
+                <button className="toggle-button is-active" data-apply-fix={f.id} onClick={() => void apply(f.id)}>
+                  적용
+                </button>
+                <button className="header-button" data-dismiss-fix={f.id} onClick={() => void window.playbook.dismissFix(f.id).then(refresh)}>
+                  쓰지 않기
+                </button>
+              </div>
+            </div>
+          ))}
+          {maint.history.length > 0 && (
+            <details className="build-log">
+              <summary>유지보수 기록 {maint.history.length}건</summary>
+              <ol>
+                {maint.history.slice(0, 8).map((h, i) => (
+                  <li key={`${h.at}-${i}`}>
+                    <span className="build-log-at">{new Date(h.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    {h.text}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </section>
+      )}
 
       <section className="detail-section">
         <h2>이게 뭔가요</h2>
@@ -102,6 +151,18 @@ export function ServiceDetail({ service, onBack, onToggle, onExport }: Props) {
         )}
         {!service.isActive && <p className="muted">서비스를 켜야 단축키가 실제로 동작해요.</p>}
       </section>
+
+      {maint && (
+        <label className="maint-auto">
+          <input
+            type="checkbox"
+            data-auto-apply
+            checked={maint.autoApply}
+            onChange={(e) => void window.playbook.setAutoApply(e.target.checked).then(refresh)}
+          />
+          앱에 문제가 생겨 HackMac이 고치면 확인 없이 바로 적용하기 (적용한 뒤에는 알려 드려요)
+        </label>
+      )}
     </div>
   );
 }

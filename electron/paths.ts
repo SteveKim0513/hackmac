@@ -45,14 +45,15 @@ export function popupStubPath(): string {
 }
 
 /** 제작 에이전트 지시·능력 목록·참고 문서. 패키지에선 extraResources의 agent/, 개발 중엔 resources/agent + docs/ */
-export function agentDocs(): { builder: string; capabilities: string; appleGuide: string; manifestDoc: string | null } {
+export function agentDocs(): { builder: string; maintainer: string; capabilities: string; appleGuide: string; manifestDoc: string | null } {
   if (app.isPackaged) {
     const d = path.join(process.resourcesPath, 'agent');
-    return { builder: path.join(d, 'builder.md'), capabilities: path.join(d, 'capabilities.md'), appleGuide: path.join(d, 'apple-app-data-access-guide.md'), manifestDoc: null };
+    return { builder: path.join(d, 'builder.md'), maintainer: path.join(d, 'maintainer.md'), capabilities: path.join(d, 'capabilities.md'), appleGuide: path.join(d, 'apple-app-data-access-guide.md'), manifestDoc: null };
   }
   const root = app.getAppPath();
   return {
     builder: path.join(root, 'resources', 'agent', 'builder.md'),
+    maintainer: path.join(root, 'resources', 'agent', 'maintainer.md'),
     capabilities: path.join(root, 'resources', 'agent', 'capabilities.md'),
     appleGuide: path.join(root, 'docs', 'apple-app-data-access-guide.md'),
     manifestDoc: path.join(root, 'docs', 'hackmac-v2-manifest.md'),

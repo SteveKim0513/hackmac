@@ -4,7 +4,7 @@
 //   "die": 코드 3으로 끝난다
 //   "tool": tool_use 시작 줄을 낸다
 import { createInterface } from 'node:readline';
-import { demoBuild, evaluatorReply } from './demo-build.mjs';
+import { demoBuild, evaluatorReply, fixReply } from './demo-build.mjs';
 
 const argv = process.argv.slice(2);
 if (argv[0] === '--version') { console.log('9.9.9 (Claude Code)'); process.exit(0); }
@@ -53,7 +53,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   if (text === 'die') { process.stderr.write('죽음\n'); process.exit(3); }
   if (text === 'slow') { waiting = true; return; }
   if (text === 'tool') out({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'Bash' } } });
-  const full = evaluatorReply(text) ?? (text === 'build-demo' ? demoBuild(process.cwd()) : `echo:${text}`);
+  const full = evaluatorReply(text) ?? fixReply(text) ?? (text === 'build-demo' ? demoBuild(process.cwd()) : `echo:${text}`);
   out({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: full.slice(0, 5) } } });
   out({ type: 'stream_event', parent_tool_use_id: 'toolu_x', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '팀원 안쪽 글' } } });
   out({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: full.slice(5) } } });

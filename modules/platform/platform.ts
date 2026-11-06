@@ -14,7 +14,7 @@ import { assign, fillHotkeys, release, slotId, type Assignments } from '../hotke
 import { extract, pack, preview, unpack, type BundlePreview } from '../bundle/bundle.ts';
 import { Ledger } from '../ledger/ledger.ts';
 import { cronMatches, parseCron, type Cron } from '../runner/cron.ts';
-import { Runner, type RunContext, type RunResult } from '../runner/runner.ts';
+import { Runner, type RunContext, type RunnerEvent, type RunResult } from '../runner/runner.ts';
 import { Settings } from '../settings/settings.ts';
 import { writeV2Package } from '../store/fromV1.ts';
 import { readPackage, Store, type InstalledApp } from '../store/store.ts';
@@ -65,6 +65,7 @@ export class Platform {
   readonly ledger: Ledger;
   readonly runner: Runner;
   private readonly live = new Map<string, Live>();
+  private readonly listeners = new Set<(e: RunnerEvent) => void>();
   private readonly now: () => Date;
   private ticker: NodeJS.Timeout | null = null;
 
@@ -73,7 +74,49 @@ export class Platform {
     this.store = new Store(o.paths.apps, o.capabilities);
     this.settings = new Settings(o.paths.settings);
     this.ledger = new Ledger(o.paths.ledger, this.now);
-    this.runner = new Runner({ logsRoot: o.paths.logs, onEvent: (e) => this.ledger.append(e), ...o.runner });
+    this.runner = new Runner({
+      logsRoot: o.paths.logs,
+      onEvent: (e) => {
+        this.ledger.append(e);
+        for (const l of this.listeners) {
+          try { l(e); } catch { /* 듣는 쪽 오류가 실행기를 멈추지 않는다 */ }
+        }
+      },
+      ...o.runner,
+    });
+  }
+
+  /** 실행기 사건을 듣는다(감시자). 돌려받은 함수로 끊는다 */
+  subscribe(cb: (e: RunnerEvent) => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
+
+  isEnabled(appId: string): boolean {
+    return this.live.has(appId);
+  }
+
+  /**
+   * 고친 패키지를 새 버전으로 설치하고, 켜져 있던 앱이면 다시 켜서 새 버전으로 돌게 한다. 단축키 자리는 그대로(hotkeysPrevious).
+   * 새 버전을 켜지 못하면(선언이 맞지 않는 등) 옛 버전으로 되돌려 다시 켠다 — 고친다고 멀쩡히 돌던 앱이 멈추면 안 된다.
+   */
+  async applyFix(pkgDir: string, appId: string): Promise<{ ok: true; version: number } | { ok: false; error: string }> {
+    const wasEnabled = this.live.has(appId);
+    const before = this.store.get(appId)?.current ?? null;
+    const r = this.install(pkgDir);
+    if (!r.ok) return { ok: false, error: r.errors.join('; ') };
+    if (r.id !== appId) {
+      if (before !== null) this.store.switchTo(appId, before);
+      return { ok: false, error: `수정본의 id(${r.id})가 앱 id(${appId})와 달라요` };
+    }
+    if (!wasEnabled) return { ok: true, version: r.version };
+    await this.disable(appId);
+    const e = this.enable(appId);
+    if (e.ok) return { ok: true, version: r.version };
+    if (before !== null) this.store.switchTo(appId, before);
+    this.enable(appId);
+    this.ledger.append({ kind: 'app.fix.rolledback', appId, version: r.version, reason: e.reason });
+    return { ok: false, error: `새 버전을 켜지 못해 되돌렸어요: ${e.reason}` };
   }
 
   /** 번들된 v1 서비스를 보관소에 기본 앱으로 넣는다(이미 있으면 건너뜀). 실패해도 다른 서비스는 계속 */

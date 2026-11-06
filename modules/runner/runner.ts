@@ -32,7 +32,8 @@ const killGroup = (child: ChildProcess, signal: NodeJS.Signals): void => {
 /** 사건 원장에 남기는 것. 보관은 호출자가 한다(추가 전용 JSONL) */
 export type RunnerEvent =
   | { kind: 'run.start'; appId: string; script: string; pid: number | null; logPath: string }
-  | { kind: 'run.end'; appId: string; script: string; code: number | null; signal: string | null; ms: number; logPath: string }
+  /** stopped: 상주 앱을 HackMac이 일부러 끈 것(끄기·종료). 감시자는 이걸 실패로 세지 않는다 */
+  | { kind: 'run.end'; appId: string; script: string; code: number | null; signal: string | null; ms: number; logPath: string; stopped?: boolean }
   | { kind: 'resident.restart'; appId: string; attempt: number; delayMs: number }
   | { kind: 'resident.hung'; appId: string; heartbeatSec: number }
   | { kind: 'resident.gaveup'; appId: string; crashes: number; windowMs: number };
@@ -201,7 +202,7 @@ class Resident {
       log.close();
       this.log = null;
       this.child = null;
-      this.o.onEvent({ kind: 'run.end', appId: this.ctx.appId, script: this.trigger.script, code, signal, ms: Date.now() - started, logPath: log.path });
+      this.o.onEvent({ kind: 'run.end', appId: this.ctx.appId, script: this.trigger.script, code, signal, ms: Date.now() - started, logPath: log.path, ...(this.stopping ? { stopped: true } : {}) });
       if (!this.stopping) this.scheduleRestart();
     });
     child.on('error', (err) => { log.line(`실행 오류: ${String(err)}`); });

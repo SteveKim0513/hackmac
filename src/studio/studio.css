@@ -643,3 +643,28 @@
   border-radius: var(--radius-sm);
   padding: 5px 8px;
 }
+
+/* ── 앱 상세의 유지보수 ─────────────── */
+.maint-section .build-box {
+  margin-bottom: 10px;
+}
+
+.maint-msg {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+}
+
+.maint-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.maint-auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}

@@ -11,6 +11,12 @@ import type { BundlePreview } from '../modules/bundle/bundle';
 export type { BuildState, ChatEvent, InstallView, CliStatus, EngineChoice, LoginView, Message, ReqStatus, SendResult, ThreadMeta, Vendor, Verdict };
 
 export type { BundlePreview };
+/** 앱 상세의 유지보수 구역(electron/maintainHost.ts) */
+export interface MaintenanceView {
+  pending: { id: string; problem: string; summary: string; createdAt: string }[];
+  history: { at: string; kind: string; text: string }[];
+  autoApply: boolean;
+}
 export type BundlePick =
   | { picked: false }
   | { picked: true; file: string; result: { ok: true; preview: BundlePreview } | { ok: false; errors: string[] } };
