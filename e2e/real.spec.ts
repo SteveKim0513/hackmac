@@ -19,7 +19,7 @@ const onlyVendor = process.env.HACKMAC_REAL_VENDOR;
 for (const vendor of ['claude', 'codex'] as const) {
   test(`진짜 ${vendor}: 단순한 앱을 처음부터 끝까지 만든다(평가·검증·설치)`, async () => {
     test.skip(Boolean(onlyVendor) && onlyVendor !== vendor);
-    test.setTimeout(1_200_000);
+    test.setTimeout(2_700_000);
     handle = await launchApp({ real: true });
     const { page } = handle;
     const ask = page.locator('.onboarding h1');
@@ -41,13 +41,27 @@ for (const vendor of ['claude', 'codex'] as const) {
     const threadId = await page.evaluate(async () => (await window.studio.threads())[0].meta.id);
     await say('단축키를 누르면 오늘 날짜와 요일을 알림 배너로 보여 주는 앱을 만들어 줘. 설정은 필요 없어. 요구는 이게 전부고, 확인 질문 없이 바로 끝까지 만들어 줘.');
     const done = page.locator('.build-box.is-done');
+    const failed = page.locator('[data-pipeline-failed]');
     for (let turn = 1; turn <= 6; turn++) {
       console.log(`[${vendor} 턴 ${turn}] ${(await finished.last().textContent())?.slice(0, 400)}`);
       if (await done.isVisible()) break;
+      // 요구 정리 담당이 handoff하면 전문 담당들이 몇 분 일한다 — 그동안은 말을 걸지 않고 끝(설치·실패)을 기다린다
+      const st = await page.evaluate((id) => window.studio.build(id), threadId);
+      if (st?.pipeline?.status === 'running') {
+        await expect(done.or(failed)).toBeVisible({ timeout: 2_400_000 });
+        break;
+      }
       await say('네, 그대로 진행해 주세요. 끝까지 만들어서 설치해 주세요.');
     }
     const state = await page.evaluate((id) => window.studio.build(id), threadId);
-    console.log(`[${vendor}] 최종 상태`, JSON.stringify({ step: state?.step, req: state?.requirements, verdict: state?.verdict?.kind, gate: state?.gate?.ok, installed: state?.installed, log: state?.log.map((l) => l.text) }, null, 1));
+    console.log(`[${vendor}] 최종 상태`, JSON.stringify({
+      step: state?.step, req: state?.requirements, verdict: state?.verdict?.kind, gate: state?.gate?.ok, installed: state?.installed,
+      pipeline: state?.pipeline, rubric: state?.rubric, audit: state?.audit, experiments: state?.experiments, log: state?.log.map((l) => `${l.at ?? ''} ${l.text}`),
+    }, null, 1));
+    // 결과를 받은 요구 정리 담당이 사용자에게 말할 때까지(파이프라인이 끝나면 결과 글이 간다)
+    const handoffReply = await finished.count();
+    await expect(finished).toHaveCount(handoffReply + 1, { timeout: 600_000 }).catch(() => console.log(`[${vendor}] 결과 보고가 10분 안에 오지 않음`));
+    console.log(`[${vendor}] 결과 보고: ${(await finished.last().textContent())?.slice(0, 1200)}`);
     await expect(done).toBeVisible();
     await page.locator('.build-box.is-done button').click();
     await expect(page.locator('.detail-page')).toBeVisible();

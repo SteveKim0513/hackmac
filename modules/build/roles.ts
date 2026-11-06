@@ -159,6 +159,8 @@ export const testerPrompt = (i: { requirements: Req[]; round: number; problems: 
 export const auditorPrompt = (i: {
   requirements: Req[];
   rubric: string[];
+  /** 지난 감사가 지적한 것(보완 뒤 다시 볼 때). 비어 있으면 첫 감사 */
+  previous?: string[];
   baseline: { id: string; text: string }[];
   files: { path: string; text: string }[];
   truncated: boolean;
@@ -171,6 +173,11 @@ export const auditorPrompt = (i: {
     '- 요구사항에 "조정할 수 있다·바꿀 수 있다·정할 수 있다"가 있으면: manifest.json settings에 선언돼 있고, 스크립트(또는 스케줄 설정 참조)가 그 값을 실제로 읽을 때만 충족이다. 코드에 값이 박혀 있으면 미충족.',
     '- 일부만 되면 미충족이고, gap에 무엇이 빠졌는지 개발 담당이 바로 고칠 수 있게 구체적으로 적는다.',
     '- 너그럽게 보지 않는다. 확신이 없으면 미충족이다.',
+    '- HackMac이 주는 통로는 믿는다: `display notification` 알림 배너와 `$HACKMAC_POPUP` 창 자체가 실패하는 경우까지 앱이 대비할 필요는 없다(스크립트가 0이 아닌 코드로 끝나면 HackMac이 "실행에 실패했어요" 알림을 직접 띄운다). 실패를 알리는 기준(S4·S5)은 앱 자신의 일 — 인터넷·다른 앱 자동화·빈 데이터·잘못된 설정 — 이 실패할 때를 본다.',
+    '- 요구사항·채점표·서비스 기준에 적힌 것만 판정한다. 거기 없는 새 요구(더 좋아 보이는 것, 극단적인 이중 실패 대비)를 만들지 않는다.',
+    ...(i.previous?.length
+      ? ['', '## 지난 감사가 지적한 것(개발 담당이 고쳤다고 한다)', ...i.previous.map((x) => `- ${x}`), '이번에는 먼저 이것들이 고쳐졌는지 본다. 고쳐졌으면 그 항목은 충족이다. 지난번에 충족이던 항목을 이유 없이 뒤집지 않는다.']
+      : []),
     '',
     '## 요구사항(전부 판정)',
     ...reqLines(i.requirements),

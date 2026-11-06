@@ -147,6 +147,7 @@ export async function runPipeline(d: PipelineDeps, signal: AbortSignal): Promise
 
     // 7. 검증 → 감사 → 보완
     let fixedProblems: string[] = [];
+    let lastAuditGaps: string[] = [];
     for (let round = 0; ; round++) {
       stage = '검증';
       check();
@@ -158,7 +159,8 @@ export async function runPipeline(d: PipelineDeps, signal: AbortSignal): Promise
         problems = report.checks.filter((c) => !c.ok).flatMap((c) => c.problems.map((p) => `[검증 ${c.label}] ${p}`));
       } else {
         stage = '감사';
-        audit = await runAudit(rl);
+        audit = await runAudit(rl, lastAuditGaps);
+        lastAuditGaps = audit.ok ? [] : auditProblems(audit.items);
         problems = audit.ok ? [] : auditProblems(audit.items);
       }
       if (audit?.ok) {
@@ -223,10 +225,10 @@ export async function runPipeline(d: PipelineDeps, signal: AbortSignal): Promise
     }
   }
 
-  async function runAudit(rl: string[]): Promise<AuditResult> {
+  async function runAudit(rl: string[], previous: string[]): Promise<AuditResult> {
     const reqs = d.state().requirements;
     const { files, truncated } = collectFiles(pkg);
-    const prompt = auditorPrompt({ requirements: reqs.map((r) => ({ id: r.id, text: r.text, manual: r.manual, accept: r.accept })), rubric: rl, baseline: BASELINE_AUDIT.map((b) => ({ id: b.id, text: `${b.label}: ${b.text}` })), files, truncated });
+    const prompt = auditorPrompt({ requirements: reqs.map((r) => ({ id: r.id, text: r.text, manual: r.manual, accept: r.accept })), rubric: rl, baseline: BASELINE_AUDIT.map((b) => ({ id: b.id, text: `${b.label}: ${b.text}` })), files, truncated, previous });
     let res = parseAudit(await role('auditor', prompt), reqs, d.roleBy('auditor'));
     if (!res) res = parseAudit(await role('auditor', `${prompt}\n\n앞선 답을 읽지 못했다. JSON 모양을 지켜 다시 낸다.`), reqs, d.roleBy('auditor'));
     // 판정을 못 읽으면 통과로 치지 않는다: 모든 항목 미충족

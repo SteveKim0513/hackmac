@@ -191,7 +191,12 @@ describe('Builder(진짜 hackmac-build 클라이언트로)', () => {
     const { o, text } = await ended;
     expect(o).toMatchObject({ ok: false, stage: '감사', cancelled: false });
     expect(installs).toEqual([]);
-    expect(roleCalls.filter((c) => c.role === 'auditor')).toHaveLength(4); // 처음 + 보완 3번
+    const audits = roleCalls.filter((c) => c.role === 'auditor');
+    expect(audits).toHaveLength(4); // 처음 + 보완 3번
+    // 보완 뒤 감사는 지난 지적을 받아 그것부터 본다(기준을 계속 올리지 않게)
+    expect(audits[0].prompt).not.toContain('지난 감사가 지적한 것');
+    expect(audits[1].prompt).toContain('지난 감사가 지적한 것');
+    expect(audits[1].prompt).toContain('알림 시각을 바꿀 설정이 없다');
     const fixPrompt = roleCalls.find((c) => c.role === 'developer' && c.prompt.includes('보완'))!.prompt;
     expect(fixPrompt).toContain('[감사 R1]');
     expect(fixPrompt).toContain('알림 시각을 바꿀 설정이 없다');
