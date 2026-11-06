@@ -32,9 +32,9 @@ describe('createInstalls', () => {
     expect(INSTALL_SCRIPT.codex).toBe('curl -fsSL https://chatgpt.com/codex/install.sh | sh');
   });
 
-  it('설치기 환경: ~/.local/bin이 PATH 맨 앞(쉘 설정 파일을 안 건드리게), 비대화, API 키 없음', () => {
-    const env = installEnv('/h', { PATH: '/usr/local/bin:/usr/bin', OPENAI_API_KEY: 'k', SHELL: '/bin/zsh' });
-    expect(env.PATH.split(':')[0]).toBe('/h/.local/bin');
+  it('설치기 환경: PATH는 ~/.local/bin + 기본 폴더뿐(기존 npm/brew Codex가 보이면 설치기가 쉘 설정 파일을 고친다), 비대화, API 키 없음', () => {
+    const env = installEnv('/h', { PATH: '/Users/x/.fnm/bin:/opt/homebrew/bin:/usr/bin', OPENAI_API_KEY: 'k', SHELL: '/bin/zsh' });
+    expect(env.PATH).toBe('/h/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
     expect(env.CODEX_NON_INTERACTIVE).toBe('1');
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.HOME).toBe('/h');

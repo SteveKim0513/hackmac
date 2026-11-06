@@ -3,8 +3,8 @@
  *   Claude: curl -fsSL https://claude.ai/install.sh | bash -s stable   → ~/.local/bin/claude
  *   Codex:  CODEX_NON_INTERACTIVE=1 … https://chatgpt.com/codex/install.sh | sh → ~/.local/bin/codex
  *
- * 사용자 쉘 설정 파일을 건드리지 않는다: Codex 설치기는 PATH에 ~/.local/bin이 이미 있으면 .zprofile에 PATH 줄을 넣지 않는다
- * (install.sh add_to_path, 2026-11-06 확인). 그래서 그 폴더를 PATH 앞에 넣어 돌린다. HackMac은 CLI를 절대경로로 부르니 문제없다.
+ * 사용자 쉘 설정 파일(.zprofile)을 건드리지 않는다: Codex 설치기는 기존 Codex가 안 보이고 ~/.local/bin이 PATH에 있으면 PATH 줄을 넣지 않는다.
+ * 그래서 설치기에 기존 PATH를 보여 주지 않고 ~/.local/bin을 앞에 둔다(installEnv 참고). HackMac은 CLI를 절대경로로 부르니 문제없다.
  * 비대화 모드에서 Codex 설치기의 질문("지금 실행?", "기존 npm 설치본 지우기?")은 전부 "아니요"다.
  * 스크립트 내용은 실행 때마다 받는다(고정하지 않는다 — 설치기가 바뀌면 그대로 따른다). 설치 뒤 `<bin> --version`으로 확인한다.
  */
@@ -41,11 +41,15 @@ export interface InstallDeps {
 
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
+/**
+ * 설치기에 주는 환경. PATH는 ~/.local/bin + macOS 기본 폴더뿐이다 — 사용자의 기존 PATH를 보여 주지 않는다.
+ * 실측(2026-11-06): PATH에 npm으로 깐 codex가 보이면 Codex 설치기가 "기존 설치와 충돌"로 보고, ~/.local/bin이 PATH에 있어도
+ * .zprofile에 PATH 줄을 넣었다(install.sh의 add_to_path가 conflict_manager가 있으면 early return 하지 않는다).
+ * 기존 설치가 있으면 애초에 설치를 안 하므로(resolveBin이 먼저 찾는다) 이 설치기에는 기존 Codex가 없는 상태가 맞다.
+ */
 export const installEnv = (home: string, base: NodeJS.ProcessEnv = process.env): Record<string, string> => {
   const env = cleanEnv({}, base);
-  const local = join(home, '.local', 'bin');
-  const rest = (env.PATH ?? '').split(':').filter((p) => p && p !== local);
-  return { ...env, HOME: home, SHELL: env.SHELL ?? '/bin/zsh', PATH: [local, ...rest, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].filter((p, i, a) => a.indexOf(p) === i).join(':'), CODEX_NON_INTERACTIVE: '1' };
+  return { ...env, HOME: home, SHELL: env.SHELL ?? '/bin/zsh', PATH: [join(home, '.local', 'bin'), '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'), CODEX_NON_INTERACTIVE: '1' };
 };
 
 export const createInstalls = (deps: InstallDeps = { spawn: nodeSpawn, home: homedir() }) => {
