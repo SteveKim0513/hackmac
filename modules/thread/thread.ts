@@ -18,6 +18,8 @@ export interface ThreadMeta {
   updatedAt: string;
   /** 이 스레드를 연 엔진. 진행 중 대화는 다른 회사로 넘기지 않는다(계획서 6.2) */
   vendor: Vendor | null;
+  /** 이 스레드가 쓰는 계정 id(modules/account/accounts.ts). 같은 회사 안에서 사용자가 옮길 수 있다. 옛 스레드엔 없다 */
+  account?: string | null;
   /** 엔진 세션(Claude 세션 / Codex thread) 번호. 이어 열 때 쓴다 */
   session: string | null;
   /** 완성돼 보관소에 들어간 앱 id */
@@ -60,7 +62,7 @@ export class ThreadStore {
     const id = randomUUID();
     const at = this.now().toISOString();
     // '새 앱'은 modules/studio/chat.ts의 NEW_TITLE과 같아야 첫 글로 제목이 붙는다
-    const meta: ThreadMeta = { schema: 1, id, title: title.trim() || '새 앱', createdAt: at, updatedAt: at, vendor: null, session: null, appId: null };
+    const meta: ThreadMeta = { schema: 1, id, title: title.trim() || '새 앱', createdAt: at, updatedAt: at, vendor: null, account: null, session: null, appId: null };
     mkdirSync(join(this.dir(id), 'work'), { recursive: true });
     this.writeMeta(meta);
     return meta;
@@ -83,7 +85,7 @@ export class ThreadStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  update(id: string, patch: Partial<Pick<ThreadMeta, 'title' | 'vendor' | 'session' | 'appId'>>): ThreadMeta {
+  update(id: string, patch: Partial<Pick<ThreadMeta, 'title' | 'vendor' | 'account' | 'session' | 'appId'>>): ThreadMeta {
     const m = this.get(id);
     if (!m) throw new Error(`없는 스레드: ${id}`);
     const next = { ...m, ...patch, updatedAt: this.now().toISOString() };

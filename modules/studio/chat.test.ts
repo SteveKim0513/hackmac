@@ -11,7 +11,11 @@ const FIXTURES = join(process.cwd(), 'modules', 'conversation', 'fixtures');
 let tmp: string;
 let threads: ThreadStore;
 let events: { id: string; e: ChatEvent }[];
-let loggedIn: Set<Vendor>;
+let loggedIn: Set<string>;
+let active: Record<Vendor, string>;
+let copies: { vendor: Vendor; from: string; to: string; session: string }[];
+let copyOk: boolean;
+let envSeen: Record<string, string>[];
 let chats: Chats;
 
 const until = async (pred: () => boolean, ms = 5000): Promise<void> => {
@@ -23,17 +27,27 @@ const make = (defaultVendor: Vendor | null = 'claude') =>
   new Chats({
     threads,
     defaultVendor: () => defaultVendor,
-    engineFor: (v) => (loggedIn.has(v) ? { bin: process.execPath, env: { ...process.env } as Record<string, string> } : null),
+    activeAccount: (v) => active[v],
+    accountLabel: (id) => (id.endsWith('-default') ? '기본 계정' : `계정 ${id.split('-')[1]}`),
+    engineFor: (v, account) => (loggedIn.has(account) && account.startsWith(`${v}-`) ? { bin: process.execPath, env: { ...process.env, HM_ACCOUNT: account } as Record<string, string> } : null),
+    copySession: (vendor, from, to, session) => {
+      copies.push({ vendor, from, to, session });
+      return copyOk ? { ok: true } : { ok: false, detail: '원본 없음' };
+    },
     instructions: '요구만 정리한다',
     onEvent: (id, e) => events.push({ id, e }),
-    create: (v, o) => createConversation(v, { ...o, prefixArgs: [join(FIXTURES, `fake-${v}.mjs`)] }),
+    create: (v, o) => { envSeen.push(o.env); return createConversation(v, { ...o, prefixArgs: [join(FIXTURES, `fake-${v}.mjs`)] }); },
   });
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'hackmac-chat-'));
   threads = new ThreadStore(join(tmp, 'threads'));
   events = [];
-  loggedIn = new Set(['claude', 'codex']);
+  loggedIn = new Set(['claude-default', 'codex-default']);
+  active = { claude: 'claude-default', codex: 'codex-default' };
+  copies = [];
+  copyOk = true;
+  envSeen = [];
   chats = make();
 });
 afterEach(async () => {
@@ -100,9 +114,9 @@ describe('Chats', () => {
     await chats.send(t.id, '처음');
     await until(() => threads.messages(t.id).length === 2);
     await chats.stopAll();
-    loggedIn.delete('claude');
+    loggedIn.delete('claude-default');
     chats = make('codex');
-    expect(await chats.send(t.id, '이어서')).toEqual({ ok: false, reason: expect.stringContaining('Claude에 다시 로그인') });
+    expect(await chats.send(t.id, '이어서')).toEqual({ ok: false, reason: expect.stringContaining('기본 계정') });
     expect(threads.messages(t.id)).toHaveLength(2);
   });
 
@@ -128,5 +142,79 @@ describe('Chats', () => {
     await chats.interrupt(t.id);
     await until(() => threads.messages(t.id).length === 2);
     expect(threads.messages(t.id)[1]).toMatchObject({ role: 'assistant', interrupted: true });
+  });
+
+  it('새 스레드는 지금 쓰는 계정으로 시작하고, 그 계정을 스레드가 기억한다(나중에 기본이 바뀌어도)', async () => {
+    loggedIn.add('claude-2');
+    active.claude = 'claude-2';
+    const t = threads.create('x');
+    await chats.send(t.id, '안녕');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(threads.get(t.id)).toMatchObject({ vendor: 'claude', account: 'claude-2' });
+    expect(envSeen.at(-1)).toMatchObject({ HM_ACCOUNT: 'claude-2' });
+    await chats.stopAll();
+    active.claude = 'claude-default';
+    await chats.send(t.id, '다음');
+    await until(() => threads.messages(t.id).length === 4);
+    expect(envSeen.at(-1)).toMatchObject({ HM_ACCOUNT: 'claude-2' });
+  });
+
+  it('수동 전환: 세션 기록을 복사해 같은 세션으로 이어 열고, 알림 글이 남는다', async () => {
+    loggedIn.add('claude-2');
+    const t = threads.create('x');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(await chats.moveAccount(t.id, 'claude-2')).toEqual({ ok: true });
+    expect(copies).toEqual([{ vendor: 'claude', from: 'claude-default', to: 'claude-2', session: 'sess-new' }]);
+    expect(threads.get(t.id)).toMatchObject({ account: 'claude-2', session: 'sess-new' });
+    expect(threads.messages(t.id).at(-1)).toMatchObject({ role: 'notice', text: expect.stringContaining('진행 중이던 대화도 그대로 이어져요') });
+    await chats.send(t.id, '이어서');
+    await until(() => threads.messages(t.id).length === 5);
+    expect(envSeen.at(-1)).toMatchObject({ HM_ACCOUNT: 'claude-2' });
+    expect(threads.messages(t.id).at(-1)!.text).toBe('echo:이어서');
+  });
+
+  it('수동 전환: 복사하지 못하면 세션을 비우고 새 대화로 시작한다고 알린다', async () => {
+    loggedIn.add('claude-2');
+    copyOk = false;
+    const t = threads.create('x');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(await chats.moveAccount(t.id, 'claude-2')).toEqual({ ok: true });
+    expect(threads.get(t.id)).toMatchObject({ account: 'claude-2', session: null });
+    expect(threads.messages(t.id).at(-1)).toMatchObject({ role: 'notice', text: expect.stringContaining('새 대화로 시작해요') });
+  });
+
+  it('수동 전환을 막는 경우: 다른 회사·로그인 안 된 계정·일하는 중·시작 전·같은 계정', async () => {
+    loggedIn.add('claude-2');
+    const fresh = threads.create('x');
+    expect(await chats.moveAccount(fresh.id, 'claude-2')).toMatchObject({ ok: false, reason: expect.stringContaining('아직 시작하지 않은') });
+    const t = threads.create('y');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    expect(await chats.moveAccount(t.id, 'codex-default')).toMatchObject({ ok: false, reason: expect.stringContaining('같은 회사') });
+    expect(await chats.moveAccount(t.id, 'claude-3')).toMatchObject({ ok: false, reason: expect.stringContaining('로그인돼 있지 않아요') });
+    expect(await chats.moveAccount(t.id, 'claude-default')).toEqual({ ok: true });
+    expect(copies).toEqual([]);
+    await chats.send(t.id, 'slow');
+    await new Promise((r) => setTimeout(r, 80));
+    expect(await chats.moveAccount(t.id, 'claude-2')).toMatchObject({ ok: false, reason: expect.stringContaining('답을 쓰는 중') });
+    expect(threads.get(t.id)!.account).toBe('claude-default');
+  });
+
+  it('옮긴 계정에서 이어 열기가 실패하면 새 대화로 시작하고 알린다(Codex: 세션 기록만 복사해서는 안 열릴 수 있다)', async () => {
+    chats = new Chats({
+      threads, defaultVendor: () => 'claude', activeAccount: (v) => active[v], accountLabel: (id) => id,
+      engineFor: () => ({ bin: process.execPath, env: { ...process.env } as Record<string, string> }),
+      copySession: () => ({ ok: true }), instructions: 'x', onEvent: (id, e) => events.push({ id, e }),
+      create: (v, o) => createConversation(v, { ...o, prefixArgs: [join(FIXTURES, `fake-${v}.mjs`)], env: { ...o.env, ...(o.resume ? { HACKMAC_FAKE_RESUME_FAIL: '1' } : {}) } }),
+    });
+    const t = threads.create('x');
+    await chats.send(t.id, '처음');
+    await until(() => threads.messages(t.id).length === 2);
+    await chats.close(t.id);
+    expect(await chats.send(t.id, '이어서')).toEqual({ ok: true });
+    await until(() => threads.messages(t.id).some((m) => m.text === 'echo:이어서'));
+    expect(threads.messages(t.id).some((m) => m.role === 'notice' && m.text.includes('새 대화로 시작해요'))).toBe(true);
   });
 });

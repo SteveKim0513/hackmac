@@ -12,8 +12,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AccountStore, configDirOf } from '../modules/account/accounts';
 import { chooseEngine } from '../modules/account/choose';
-import { cliStatus, envFor, resolveBin, run, searchDirs, VENDORS, type CliStatus, type Vendor } from '../modules/account/cli';
+import { copySession } from '../modules/account/session';
+import { cliStatus, envFor, resolveBin, run, searchDirs, VENDORS, type Vendor } from '../modules/account/cli';
 import { createLogins, fileLogger, type LoginView } from '../modules/account/login';
 import { createInstalls, type InstallView } from '../modules/prepare/install';
 import type { Platform } from '../modules/platform/platform';
@@ -25,7 +27,7 @@ import { Chats, type ChatEvent } from '../modules/studio/chat';
 import { readPackage } from '../modules/store/store';
 import { ThreadStore, type ThreadMeta } from '../modules/thread/thread';
 import { CAPABILITIES } from './platformHost';
-import type { AccountsView, ThreadView, VendorView } from '../shared/studio';
+import type { AccountsView, AccountView, ThreadView, VendorView } from '../shared/studio';
 import { appLog, describeError } from './log';
 import { agentDocs, buildClientJsPath, buildWrapperPath, popupStubPath } from './paths';
 
@@ -50,7 +52,10 @@ const broadcast = (channel: string, payload: unknown): void => {
 export function startStudio(platform: Platform): { stop: () => Promise<void> } {
   const threads = new ThreadStore(path.join(app.getPath('userData'), 'threads'));
   const logins = createLogins({ spawn, bin: binFor, log: fileLogger(path.join(app.getPath('logs'), 'accounts')) });
-  let vendors: Record<Vendor, VendorView> | null = null;
+  const accounts = new AccountStore(path.join(app.getPath('userData'), 'accounts.json'), path.join(app.getPath('userData'), 'accounts'));
+  // 계정마다 마지막으로 확인한 상태(id → 상태). 로그인·설치·계정 추가가 끝날 때마다 다시 확인한다
+  let statuses: Map<string, VendorView> | null = null;
+  const NONE: VendorView = { loggedIn: false, email: null, plan: null, method: null, identity: null, installed: false };
   // 준비: 없는 CLI를 공식 설치 스크립트로 깐다. HACKMAC_INSTALL_SCRIPT_<VENDOR>는 E2E 전용(진짜 설치기 대신 가짜 CLI를 놓는다)
   const accountsLog = fileLogger(path.join(app.getPath('logs'), 'accounts'));
   const installs = createInstalls({
@@ -61,37 +66,59 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
     log: (v, text) => accountsLog(`install-${v}`, text),
   });
 
-  const detect = async (): Promise<Record<Vendor, VendorView>> => {
+  const detect = async (): Promise<Map<string, VendorView>> => {
     const entries = await Promise.all(
-      VENDORS.map(async (v) => {
+      accounts.list().map(async (a) => {
         try {
-          const r = await cliStatus(v, {}, { bin: binFor, run });
-          const s: CliStatus = r.status ?? { loggedIn: false, email: null, plan: null, method: null, identity: null };
-          return [v, { ...s, installed: r.installed }] as const;
+          const r = await cliStatus(a.vendor, accounts.env(a.id), { bin: binFor, run });
+          return [a.id, { ...(r.status ?? NONE), installed: r.installed }] as const;
         } catch (err) {
-          appLog.warn('studio', `${v} 상태 확인 실패: ${describeError(err)}`);
-          return [v, { loggedIn: false, email: null, plan: null, method: null, identity: null, installed: false }] as const;
+          appLog.warn('studio', `${a.id} 상태 확인 실패: ${describeError(err)}`);
+          return [a.id, NONE] as const;
         }
       }),
     );
-    vendors = Object.fromEntries(entries) as Record<Vendor, VendorView>;
-    appLog.info('studio', `엔진 감지: ${VENDORS.map((v) => `${v}=${vendors![v].installed ? (vendors![v].loggedIn ? '로그인' : '설치만') : '없음'}`).join(', ')}`);
-    return vendors;
+    statuses = new Map(entries);
+    appLog.info('studio', `엔진 감지: ${accounts.list().map((a) => { const s = statuses!.get(a.id)!; return `${a.id}=${s.installed ? (s.loggedIn ? '로그인' : '설치만') : '없음'}`; }).join(', ')}`);
+    return statuses;
   };
 
   const view = async (refresh: boolean): Promise<AccountsView> => {
-    const vs = refresh || !vendors ? await detect() : vendors;
+    const st = refresh || !statuses ? await detect() : statuses;
+    // 쓰던 계정이 로그아웃됐는데 같은 회사에 로그인된 다른 계정이 있으면 그쪽으로 옮긴다(새 앱 만들기가 막히지 않게)
+    for (const v of VENDORS) {
+      const cur = accounts.active(v);
+      if (!st.get(cur.id)?.loggedIn) {
+        const other = accounts.list(v).find((a) => st.get(a.id)?.loggedIn);
+        if (other) {
+          appLog.info('studio', `${cur.id}이(가) 로그아웃돼 ${other.id}로 옮김`);
+          accounts.setActive(other.id);
+        }
+      }
+    }
+    const active = (v: Vendor): VendorView => st.get(accounts.active(v).id) ?? NONE;
+    const vendors = { claude: active('claude'), codex: active('codex') } as Record<Vendor, VendorView>;
+    const seen = new Map<string, string>();
+    const list: AccountView[] = accounts.list().map((a) => {
+      const s = st.get(a.id) ?? NONE;
+      const key = s.identity ? `${a.vendor}|${s.identity}` : null;
+      const dup = key ? seen.get(key) ?? null : null;
+      if (key && !dup) seen.set(key, a.id);
+      return { ...s, id: a.id, vendor: a.vendor, label: a.label, isDefault: a.configDir === null, active: accounts.activeId(a.vendor) === a.id, duplicateOf: dup };
+    });
     const saved = platform.settings.get().engine;
-    const choice = chooseEngine(vs, saved);
+    const choice = chooseEngine(vendors, saved);
     // 하나뿐이거나 저장된 쪽이 로그아웃돼 남은 쪽을 쓰게 되면 그 선택을 저장한다(계획서 6.1: 묻지 않고 쓴다)
     if (choice.kind === 'use' && choice.vendor !== saved) platform.settings.update({ engine: choice.vendor });
-    return { vendors: vs, choice, engine: choice.kind === 'use' ? choice.vendor : null };
+    return { vendors, accounts: list, choice, engine: choice.kind === 'use' ? choice.vendor : null };
   };
 
-  const engineFor = (v: Vendor) => {
-    if (!vendors?.[v]?.loggedIn) return null;
+  /** 그 계정으로 CLI를 쓸 수 있으면 실행 정보. 환경에는 그 계정의 설정 폴더가 들어간다 */
+  const engineFor = (v: Vendor, accountId: string) => {
+    const a = accounts.get(accountId);
+    if (!a || a.vendor !== v || !statuses?.get(accountId)?.loggedIn) return null;
     const bin = binFor(v);
-    return bin ? { bin, env: envFor(bin) } : null;
+    return bin ? { bin, env: envFor(bin, accounts.env(accountId)) } : null;
   };
 
   // ── 제작(4단계) ──────────────────────────────
@@ -126,9 +153,9 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
       evaluator: () => {
         const builderVendor = threads.get(threadId)?.vendor ?? platform.settings.get().engine;
         const order = VENDORS.filter((v) => v !== builderVendor).concat(builderVendor ? [builderVendor] : []);
-        const v = order.find((x) => engineFor(x));
+        const v = order.find((x) => engineFor(x, accounts.activeId(x)));
         if (!v) return null;
-        const eng = engineFor(v)!;
+        const eng = engineFor(v, accounts.activeId(v))!;
         return {
           by: VENDOR_NAME[v],
           ask: async (prompt: string) => {
@@ -167,9 +194,19 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
     threads,
     defaultVendor: () => {
       const saved = platform.settings.get().engine;
-      return saved && vendors?.[saved]?.loggedIn ? saved : null;
+      return saved && statuses?.get(accounts.activeId(saved))?.loggedIn ? saved : null;
     },
+    activeAccount: (v) => accounts.activeId(v),
+    accountLabel: (id) => accounts.get(id)?.label ?? '삭제된 계정',
     engineFor,
+    copySession: (vendor, fromId, toId, session) => {
+      const from = accounts.get(fromId);
+      const to = accounts.get(toId);
+      if (!from || !to) return { ok: false, detail: '계정을 찾을 수 없어요' };
+      const r = copySession(vendor, configDirOf(from), configDirOf(to), session);
+      appLog.info('studio', `세션 복사 ${fromId} → ${toId}: ${r.ok ? r.copied.join(', ') : r.detail}`);
+      return r.ok ? { ok: true } : { ok: false, detail: r.detail };
+    },
     instructions,
     optionsFor: (vendor, threadId, cwd) => {
       builderFor(threadId);
@@ -188,24 +225,52 @@ export function startStudio(platform: Platform): { stop: () => Promise<void> } {
     platform.settings.update({ engine: v });
     return view(false);
   });
-  ipcMain.handle('login:start', (_e, v: Vendor): LoginView => {
+  // 같은 회사 계정 추가·전환·이름 바꾸기·삭제(수동). 로그인은 그 계정의 설정 폴더 안에서 공식 CLI가 한다
+  const changed = async (): Promise<AccountsView> => {
+    const a = await view(true);
+    broadcast('accounts:changed', a);
+    return a;
+  };
+  ipcMain.handle('accounts:add', async (_e, v: Vendor, label?: string) => {
+    if (!VENDORS.includes(v)) throw new Error(`모르는 엔진: ${v}`);
+    const r = accounts.add(v, label);
+    appLog.info('studio', `계정 추가: ${r.ok ? r.account.id : r.error}`);
+    return r.ok ? { ok: true as const, id: r.account.id, view: await changed() } : { ok: false as const, error: r.error };
+  });
+  ipcMain.handle('accounts:setActive', async (_e, id: string) => {
+    if (!accounts.setActive(String(id))) return { ok: false as const, error: '없는 계정이에요' };
+    appLog.info('studio', `쓰는 계정 전환: ${id}`);
+    return { ok: true as const, view: await changed() };
+  });
+  ipcMain.handle('accounts:rename', async (_e, id: string, label: string) =>
+    accounts.rename(String(id), String(label)) ? { ok: true as const, view: await changed() } : { ok: false as const, error: '이름을 바꿀 수 없어요' });
+  ipcMain.handle('accounts:remove', async (_e, id: string) => {
+    logins.cancel(String(id));
+    const ok = accounts.remove(String(id));
+    appLog.info('studio', `계정 삭제: ${id} ${ok ? '' : '(기본 계정이거나 없음)'}`);
+    return ok ? { ok: true as const, view: await changed() } : { ok: false as const, error: '기본 계정은 지울 수 없어요' };
+  });
+  ipcMain.handle('login:start', (_e, accountId: string): LoginView => {
+    const a = accounts.get(String(accountId));
+    if (!a) return { state: 'failed', url: null, needsCode: false, output: '없는 계정이에요' };
     // CLI가 브라우저를 직접 연다. 안 열렸을 때만 화면의 주소 버튼을 누른다
-    return logins.start(v, v, {}, (ok) => {
-      appLog.info('studio', `${v} 로그인 ${ok ? '성공' : '실패'}`);
-      void view(true).then((a) => broadcast('accounts:changed', a));
+    return logins.start(a.id, a.vendor, accounts.env(a.id), (ok) => {
+      appLog.info('studio', `${a.id} 로그인 ${ok ? '성공' : '실패'}`);
+      void changed();
     });
   });
-  ipcMain.handle('login:state', (_e, v: Vendor) => logins.state(v));
+  ipcMain.handle('login:state', (_e, id: string) => logins.state(String(id)));
   ipcMain.handle('install:start', (_e, v: Vendor): InstallView => {
     if (!VENDORS.includes(v)) throw new Error(`모르는 엔진: ${v}`);
     return installs.start(v, (ok) => {
       appLog.info('studio', `${v} 설치 ${ok ? '성공' : '실패'}`);
-      void view(true).then((a) => broadcast('accounts:changed', a));
+      void changed();
     });
   });
   ipcMain.handle('install:state', (_e, v: Vendor) => installs.state(v));
-  ipcMain.handle('login:submit', (_e, v: Vendor, code: string) => logins.submit(v, code));
-  ipcMain.handle('login:cancel', (_e, v: Vendor) => logins.cancel(v));
+  ipcMain.handle('login:submit', (_e, id: string, code: string) => logins.submit(String(id), String(code)));
+  ipcMain.handle('login:cancel', (_e, id: string) => logins.cancel(String(id)));
+  ipcMain.handle('thread:setAccount', (_e, threadId: string, accountId: string) => chats.moveAccount(String(threadId), String(accountId)));
   ipcMain.handle('login:openUrl', (_e, url: string) => {
     if (/^https:\/\//.test(url)) void shell.openExternal(url);
   });

@@ -84,7 +84,7 @@ modules/hotkey/slots.ts  ─ 단축키 자리 풀과 배정
 modules/runner/          ─ 1회 실행·상주 감독·cron·실행 로그
 modules/ledger/          ─ 추가 전용 JSONL 사건 원장
 modules/settings/        ─ v2 settings.json(안전 쓰기, 깨진 파일 사본)
-modules/account/         ─ claude/codex CLI 찾기·로그인 상태·로그인 흐름·엔진 고르기 (토큰은 안 만짐, API 키 env는 늘 뗌)
+modules/account/         ─ claude/codex CLI 찾기·로그인 상태·로그인 흐름·엔진 고르기, 같은 회사 계정 목록(accounts.ts, 최대 3개·수동 전환)과 세션 복사(session.ts) (토큰은 안 만짐, API 키 env는 늘 뗌)
 modules/conversation/    ─ 대화 엔진 공통 인터페이스 + Claude(stream-json)·Codex(app-server) 어댑터. 실제 CLI 시험은 HACKMAC_REAL_ENGINES=1
 modules/thread/          ─ 스레드 보관(스레드 하나 = 앱 하나, userData/threads/<id>/: thread.json·messages.jsonl·work/)
 modules/studio/chat.ts   ─ 스레드마다 엔진을 이어 열고 대화를 쌓는다. 스레드는 처음 회사를 지킨다

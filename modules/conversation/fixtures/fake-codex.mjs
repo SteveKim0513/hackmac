@@ -8,9 +8,21 @@ import { demoBuild, evaluatorReply } from './demo-build.mjs';
 
 if (process.argv[2] === '--version') { console.log('codex-cli 9.9.9'); process.exit(0); }
 
-// `codex login status`: HACKMAC_FAKE_LOGGED_OUT=1이면 로그아웃 상태
+// 계정 폴더(CODEX_HOME)가 있으면 그 폴더 안 표시 파일로 로그인 여부를 가른다(추가한 계정). 없으면 기본 계정
+const home = process.env.CODEX_HOME;
+const marker = home ? `${home}/.fake-login` : null;
+// `codex login`: 주소를 내고 잠깐 뒤 표시 파일을 만들어 끝낸다(브라우저 콜백을 흉내)
+if (process.argv[2] === 'login' && !process.argv[3]) {
+  const { writeFileSync } = await import('node:fs');
+  console.log('If your browser did not open, navigate to this URL to authenticate: https://auth.openai.com/oauth/authorize?fake=1');
+  setTimeout(() => { if (marker) writeFileSync(marker, 'x'); console.log('Successfully logged in'); process.exit(marker ? 0 : 1); }, 300);
+  await new Promise(() => {});
+}
+// `codex login status`: HACKMAC_FAKE_LOGGED_OUT=1이면 (기본 계정이) 로그아웃 상태
 if (process.argv[2] === 'login' && process.argv[3] === 'status') {
-  if (process.env.HACKMAC_FAKE_LOGGED_OUT === '1') { process.stderr.write('Not logged in\n'); process.exit(1); }
+  const { existsSync } = await import('node:fs');
+  const loggedOut = marker ? !existsSync(marker) : process.env.HACKMAC_FAKE_LOGGED_OUT === '1';
+  if (loggedOut) { process.stderr.write('Not logged in\n'); process.exit(1); }
   process.stderr.write('Logged in using ChatGPT\n');
   process.exit(0);
 }

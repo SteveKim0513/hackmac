@@ -544,3 +544,102 @@
   gap: 8px;
   flex-shrink: 0;
 }
+
+/* ── 계정 관리 ───────────────────────── */
+.accounts-card {
+  max-width: 560px;
+}
+
+.account-section {
+  margin: 14px 0;
+}
+
+.account-section h3 {
+  margin: 0 0 6px;
+}
+
+.account-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.account-row.is-active {
+  border-color: color-mix(in srgb, var(--accent-default) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent-default) 6%, var(--surface));
+}
+
+.account-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-label {
+  font-weight: 600;
+}
+
+.account-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  color: #ffffff;
+  background: var(--accent-default);
+}
+
+.account-status {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.account-warn {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  max-width: 55%;
+}
+
+.account-danger {
+  color: var(--danger);
+}
+
+.account-error {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.thread-account {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.thread-account select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { VENDOR_LABEL, type AccountsView, type InstallView, type LoginView, type Vendor } from '../../shared/studio';
+import { VENDOR_LABEL, type AccountsView, type InstallView, type Vendor } from '../../shared/studio';
+import { LoginFlow } from './LoginFlow';
 
 interface Props {
   accounts: AccountsView;
@@ -37,8 +38,6 @@ export function Onboarding({ accounts, onAccounts }: Props) {
 }
 
 function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view: AccountsView['vendors'][Vendor]; asking: boolean; onAccounts: (a: AccountsView) => void }) {
-  const [login, setLogin] = useState<LoginView | null>(null);
-  const [code, setCode] = useState('');
   const [install, setInstall] = useState<InstallView | null>(null);
 
   // 설치 중에는 1초마다 진행 글을 받아 온다. 끝나면 accounts:changed가 카드를 "로그인 필요"로 바꾼다
@@ -47,13 +46,6 @@ function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view
     const t = setInterval(() => void window.studio.installState(vendor).then((s) => s && setInstall(s)), 1000);
     return () => clearInterval(t);
   }, [install?.state, vendor]);
-
-  // 로그인 중에는 1초마다 CLI 출력(주소·코드 대기)을 받아 온다. 끝나면 accounts:changed가 화면을 바꾼다
-  useEffect(() => {
-    if (login?.state !== 'pending') return;
-    const t = setInterval(() => void window.studio.loginState(vendor).then((s) => s && setLogin(s)), 1000);
-    return () => clearInterval(t);
-  }, [login?.state, vendor]);
 
   const ready = view.installed && view.loggedIn;
   const status = !view.installed ? '이 Mac에 설치돼 있지 않아요' : view.loggedIn ? (view.email ?? '로그인됨') : '로그인이 필요해요';
@@ -67,11 +59,7 @@ function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view
           이걸로 만들기
         </button>
       )}
-      {!asking && view.installed && !view.loggedIn && !login && (
-        <button className="toggle-button" onClick={() => void window.studio.loginStart(vendor).then(setLogin)}>
-          로그인
-        </button>
-      )}
+      {!asking && view.installed && !view.loggedIn && <LoginFlow accountId={`${vendor}-default`} />}
       {!view.installed && !install && (
         <button className="toggle-button" onClick={() => void window.studio.installStart(vendor).then(setInstall)}>
           설치하기
@@ -94,43 +82,6 @@ function VendorCard({ vendor, view, asking, onAccounts }: { vendor: Vendor; view
       )}
       {!view.installed && !install && <p className="vendor-card-note">{VENDOR_LABEL[vendor]} 공식 설치 프로그램으로 이 Mac에 깔아요. 관리자 암호는 필요 없어요.</p>}
       {!ready && <p className="vendor-card-note">{PLAN_NEEDED[vendor]}</p>}
-      {login && login.state === 'pending' && (
-        <div className="login-panel">
-          <p>브라우저가 열렸어요. 로그인을 마치면 여기로 돌아와요.</p>
-          {login.url && (
-            <button className="link-button" onClick={() => void window.studio.openUrl(login.url!)}>
-              브라우저가 안 열렸으면 여기를 눌러요
-            </button>
-          )}
-          {login.needsCode && (
-            <form
-              className="login-code"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void window.studio.loginSubmit(vendor, code).then((s) => s && setLogin(s));
-                setCode('');
-              }}
-            >
-              <input autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="브라우저에 보이는 코드를 붙여넣어요" />
-              <button className="toggle-button is-active" type="submit" disabled={!code.trim()}>
-                확인
-              </button>
-            </form>
-          )}
-          <button className="link-button" onClick={() => void window.studio.loginCancel(vendor).then(() => setLogin(null))}>
-            취소
-          </button>
-        </div>
-      )}
-      {login && login.state === 'failed' && (
-        <div className="login-panel is-error">
-          <p>로그인하지 못했어요.</p>
-          {login.output && <pre>{login.output.trim().split('\n').slice(-3).join('\n')}</pre>}
-          <button className="toggle-button" onClick={() => void window.studio.loginStart(vendor).then(setLogin)}>
-            다시 시도
-          </button>
-        </div>
-      )}
     </div>
   );
 }

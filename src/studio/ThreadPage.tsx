@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { VENDOR_LABEL, type BuildState, type Message, type ReqStatus, type ThreadMeta } from '../../shared/studio';
+import { VENDOR_LABEL, type AccountsView, type BuildState, type Message, type ReqStatus, type ThreadMeta } from '../../shared/studio';
 
 interface Props {
   threadId: string;
@@ -29,6 +29,7 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<AccountsView | null>(null);
   const [build, setBuild] = useState<BuildState | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const startedAt = useRef<number | null>(null);
@@ -42,6 +43,8 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
       setBusy(t.busy);
     });
     void window.studio.build(threadId).then(setBuild);
+    void window.studio.accounts().then(setAccounts);
+    const offAccounts = window.studio.onAccountsChanged(setAccounts);
     const offBuild = window.studio.onBuild((id, st) => id === threadId && setBuild(st));
     const offChat = window.studio.onChat((id, e) => {
       if (id !== threadId) return;
@@ -50,11 +53,13 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
         setMessages((ms) => [...ms, e.message]);
         if (e.message.role === 'assistant') setStreaming('');
         // 첫 글에 제목이 붙는다
-        if (e.message.role === 'user') void window.studio.thread(threadId).then((t) => t && setMeta(t.meta));
+        // 첫 글에 제목이 붙고, 계정을 옮기면 알림 글이 온다 — 둘 다 메타가 바뀐다
+        if (e.message.role === 'user' || e.message.role === 'notice') void window.studio.thread(threadId).then((t) => t && setMeta(t.meta));
       }
       if (e.kind === 'state') setBusy(e.busy);
     });
     return () => {
+      offAccounts();
       offBuild();
       offChat();
     };
@@ -93,6 +98,31 @@ export function ThreadPage({ threadId, onBack, onOpenApp }: Props) {
         </button>
         <h1 className="thread-title">{meta?.title ?? ''}</h1>
         <p className="thread-engine">{meta?.vendor ? `${VENDOR_LABEL[meta.vendor]}로 만드는 중` : '첫 글을 보내면 시작해요'}</p>
+        {meta?.vendor && accounts && (
+          <label className="thread-account">
+            쓰는 계정
+            <select
+              data-thread-account
+              value={meta.account ?? accounts.accounts.find((a) => a.vendor === meta.vendor && a.active)?.id ?? ''}
+              disabled={busy}
+              onChange={(e) =>
+                void window.studio.setThreadAccount(threadId, e.target.value).then((r) => {
+                  setNotice(r.ok ? null : r.reason);
+                  void window.studio.thread(threadId).then((t) => t && setMeta(t.meta));
+                })
+              }
+            >
+              {accounts.accounts
+                .filter((a) => a.vendor === meta.vendor && (a.loggedIn || a.id === meta.account))
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                    {a.email ? ` · ${a.email}` : ''}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <ol className="step-list">
           {STEPS.map((label, i) => {
             const n = i + 1;

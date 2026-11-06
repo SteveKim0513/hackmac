@@ -5,6 +5,7 @@ import { ServiceGrid } from './store/ServiceGrid';
 import { ServiceDetail } from './detail/ServiceDetail';
 import { ToastStack, useToasts } from './components/Toast';
 import { ThemeSwitch } from './components/ThemeSwitch';
+import { AccountsDialog } from './studio/AccountsDialog';
 import { BundlePreviewDialog } from './studio/BundlePreviewDialog';
 import { Onboarding } from './studio/Onboarding';
 import { ThreadPage } from './studio/ThreadPage';
@@ -20,6 +21,7 @@ export default function App() {
   const [threads, setThreads] = useState<ThreadView[]>([]);
   const [bundle, setBundle] = useState<{ file: string; preview: BundlePreview } | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [showAccounts, setShowAccounts] = useState(false);
   const { toasts, push, dismiss } = useToasts();
 
   useEffect(() => {
@@ -152,6 +154,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      {showAccounts && <AccountsDialog accounts={accounts} onAccounts={setAccounts} onClose={() => setShowAccounts(false)} />}
       {bundle && <BundlePreviewDialog preview={bundle.preview} busy={installing} onInstall={() => void handleInstallBundle()} onCancel={() => setBundle(null)} />}
       {view.name === 'store' || !selected ? (
         <>
@@ -163,6 +166,9 @@ export default function App() {
             <div className="header-actions">
               <button className="toggle-button is-active create-app-button" onClick={() => void handleCreate()}>
                 + 앱 만들기
+              </button>
+              <button className="header-button accounts-button" onClick={() => setShowAccounts(true)}>
+                계정
               </button>
               <button className="header-button install-app-button" onClick={() => void handlePickBundle()}>
                 앱 파일 설치
